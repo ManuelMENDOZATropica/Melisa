@@ -1,0 +1,143 @@
+:root {
+    --bg: #fffbf0;
+    /* Warm paper color */
+    --panel: #ffffff;
+    --text: #2d3436;
+    --primary: #f39c12;
+    /* Sun/Orange */
+    --secondary: #27ae60;
+    /* Tropical Green */
+    --accent: #e67e22;
+    /* Deep Orange */
+    --bot-msg: #f7f1e3;
+    --user-msg: #27ae60;
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+}
+
+.header {
+    padding: 2.5rem 1rem;
+    text-align: center;
+    width: 100%;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    color: white;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.header h1 {
+    margin: 0;
+    font-size: 2.5rem;
+    letter-spacing: 2px;
+}
+
+.header p {
+    margin: 0.5rem 0 0;
+    opacity: 0.9;
+    font-style: italic;
+}
+
+#chat-window {
+    flex: 1;
+    width: 95%;
+    max-width: 800px;
+    background: var(--panel);
+    border-radius: 20px;
+    overflow-y: auto;
+    padding: 2rem;
+    margin: 2rem 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+}
+
+.msg {
+    padding: 1rem 1.5rem;
+    border-radius: 18px;
+    max-width: 80%;
+    line-height: 1.6;
+    font-size: 1.05rem;
+    position: relative;
+    animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.user {
+    align-self: flex-end;
+    background: var(--user-msg);
+    color: white;
+    border-bottom-right-radius: 4px;
+}
+
+.bot {
+    align-self: flex-start;
+    background: var(--bot-msg);
+    color: var(--text);
+    border-bottom-left-radius: 4px;
+    border-left: 4px solid var(--primary);
+}
+
+.input-group {
+    width: 95%;
+    max-width: 800px;
+    display: flex;
+    gap: 12px;
+    padding-bottom: 2.5rem;
+}
+
+input {
+    flex: 1;
+    padding: 1rem 1.5rem;
+    border-radius: 30px;
+    border: 2px solid #edeff2;
+    background: white;
+    font-size: 1rem;
+    transition: all 0.2s;
+}
+
+input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 4px rgba(243, 156, 18, 0.1);
+}
+
+button {
+    padding: 1rem 2.5rem;
+    border-radius: 30px;
+    border: none;
+    background: var(--primary);
+    color: white;
+    font-weight: bold;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: transform 0.2s, background 0.2s;
+}
+
+button:hover {
+    background: var(--accent);
+    transform: translateY(-2px);
+}
+
+button:active {
+    transform: translateY(0);
+}

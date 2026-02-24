@@ -1,26 +1,36 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gemini 2.5 Chat</title>
+    <title>MELISA | Trópica</title>
     <link rel="stylesheet" href="css/style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="js/config.js"></script>
 </head>
 
 <body>
 
     <div class="header">
-        <h2>Gemini 2.5 Flash 🚀</h2>
+        <h1>TRÓPICA 🌴</h1>
+        <p>MELISA — Tropical Creative Director</p>
+        <button id="downloadBtn" onclick="descargarBrief()"
+            style="display:none; margin-top: 1rem; background: white; color: var(--accent); padding: 0.5rem 1.5rem;">Descargar
+            Brief PDF</button>
     </div>
 
     <div id="chat-window">
-        <div class="msg bot">Sistema actualizado a Gemini 2.5. ¿Qué vamos a probar hoy?</div>
+        <!-- Primer mensaje obligatorio de MELISA -->
+        <div class="msg bot">
+            Hi! 🌞 I’m MELISA — your tropical creative director at TRÓPICA. I’ll help you shape a complete, strategic,
+            and beautiful brief with a warm human touch.<br><br>
+            Before we dive in — where are you from, and which language would you like to continue in?
+        </div>
     </div>
 
     <div class="input-group">
-        <input type="text" id="userInput" placeholder="Escribe un mensaje..."
+        <input type="text" id="userInput" placeholder="Escribe tu respuesta aquí..."
             onkeypress="if(event.key==='Enter') enviar()">
         <button onclick="enviar()">Enviar</button>
     </div>
