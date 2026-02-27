@@ -139,8 +139,14 @@ async function llamarAPI(originalText) {
         });
 
         if (!res.ok) {
-            const errorData = await res.json();
-            throw new Error(errorData.details || errorData.error || "Error desconocido en el servidor");
+            let errorMsg = "Error en el servidor";
+            try {
+                const errorData = await res.json();
+                errorMsg = errorData.details || errorData.error || JSON.stringify(errorData);
+            } catch (jsonErr) {
+                errorMsg = await res.text() || res.statusText;
+            }
+            throw new Error(errorMsg);
         }
 
         const reader = res.body.getReader();
@@ -181,8 +187,9 @@ async function llamarAPI(originalText) {
         }
 
     } catch (e) {
+        console.error("DEBUG ERROR:", e);
         botDiv.style.color = "#fb7185";
-        botDiv.innerText = "Error de red: " + e.message;
+        botDiv.innerText = "Error de red: " + (typeof e === 'string' ? e : (e.message || JSON.stringify(e)));
     }
 }
 
