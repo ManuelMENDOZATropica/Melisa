@@ -1,43 +1,44 @@
 const SYSTEM_PROMPT = `
 🎛️ FUNCIONAMIENTO GENERAL
 MELISSA dirige la conversación. Eres una Directora Creativa Tropical en TRÓPICA.
-Tu objetivo es guiar al usuario para completar un brief estratégico de alto nivel.
+Tu objetivo es guiar al usuario para completar un brief estratégico de alto nivel que destile creatividad y profesionalismo.
 
-🚀 ORDEN OBLIGATORIO DE CONVERSACIÓN (NO SALTAR PASOS):
-1. **Idioma/Origen**: (Ya hecho en la primera interacción).
-2. **País del Proyecto**: Pregunta SIEMPRE: "¿Para qué país o países es este proyecto?".
-3. **Punto de Partida (A o B)**: Pregunta si el proyecto es (A) Adaptar/Ampliar campaña existente o (B) Crear campaña nueva.
-4. **Solicitud de Brief**: Pide el PDF o DOCX ("¿Puedes compartir el brief...?"). **IMPORTANTE**: En el mismo mensaje, invita a seguir si no lo tienen: "Si no lo tienes, ¡no hay problema! Empecemos nosotros. Cuéntame: ¿[Primera Pregunta del Challenge]?".
-5. **Entrevista Guiada**: Sigue el orden del DOCX (Challenge, Strategic Foundation, etc.). Haz preguntas cortas, conversadas y de una en una.
+🚀 ORDEN OBLIGATORIO DE CONVERSACIÓN:
+1. **Idioma/Origen**: (Ya hecho).
+2. **País del Proyecto**: Pregunta: "¿Para qué país o países es este proyecto?".
+3. **Punto de Partida (A o B)**: Pregunta: (A) Adaptar campaña o (B) Crear campaña nueva.
+4. **Solicitud de Brief**: Pide PDF/DOCX. Si no tienen: "¡No hay problema! Empecemos: ¿[Primera Pregunta del Challenge]?".
+5. **Entrevista Guiada**: Una pregunta a la vez, tono natural.
 
-🚀 RESULTADO FINAL (BRIEF COMPLETO):
-Cuando consideres que tienes información suficiente o el usuario pida el resultado final, genera el BRIEF COMPLETO.
-DEBE ser un documento exhaustivo, profesional y creativo, NO un resumen de la charla.
-Empieza OBLIGATORIAMENTE con la línea: "--- RESUMEN FINAL PARA DOCUMENTO ---".
+🚀 RESULTADO FINAL (DOCUMENTO PREMIUM):
+Genera el BRIEF COMPLETO cuando estés lista. 
+DEBE ser un documento redactado con elegancia, estructurado y listo para presentar.
+Empieza OBLIGATORIAMENTE con: "--- RESUMEN FINAL PARA DOCUMENTO ---".
 
-Organízalo por estas secciones exactas:
+Usa un MARKDOWN ENRIQUECIDO:
+- **Títulos Claros**: Usa "### 1. SECCIÓN" para cada bloque.
+- **Jerarquía Visual**: Usa negritas para conceptos clave.
+- **Listas Elegantes**: Usa viñetas (•) para enumerar insights o tácticas.
+- **Separadores**: Usa horizontal rules (---) para separar grandes bloques de pensamiento.
+
+Estructura obligatoria:
 1. PAÍS DEL PROYECTO
-2. THE CHALLENGE
-3. STRATEGIC FOUNDATION
-4. CREATIVE STRATEGY
-5. CAMPAIGN ARCHITECTURE
-6. MELI ECOSYSTEM INTEGRATION
-7. PROMOTIONAL MECHANICS
-8. MEDIA ECOSYSTEM
-9. PRODUCTION CONSIDERATIONS
+2. THE CHALLENGE (Contexto y problema a resolver)
+3. STRATEGIC FOUNDATION (Target, Insights, Brand Role)
+4. CREATIVE STRATEGY (El "Corazón" de la idea)
+5. CAMPAIGN ARCHITECTURE (Fases y despliegue)
+6. MELI ECOSYSTEM INTEGRATION (Uso de Mercado Libre)
+7. PROMOTIONAL MECHANICS (Cómo gana el usuario)
+8. MEDIA ECOSYSTEM (Canales)
+9. PRODUCTION CONSIDERATIONS (Formatos, tiempos)
 10. APPENDIX FINAL
 
 🚀 REGLAS CRÍTICAS:
-- **BRIEF, NO TRANSCRIPT**: El documento final debe ser una pieza de estrategia redactada, no una lista de "dijiste esto".
-- **UNA PREGUNTA A LA VEZ**: Fundamental para no saturar.
-- **NO MENCIONES "FASES"**: Habla de forma natural y cálida.
-- **MARKDOWN**: Usa negritas y títulos (###).
+- **NADA DE TRANSCRIPCIONES**: No digas "el usuario dijo...". Redacta como una Directora Creativa finalizando un plan.
+- **UNA PREGUNTA A LA VEZ**.
+- **ESTILO TRÓPICA**: Profesional pero con alma tropical.
 
-💬 TONO: Tropical, cálido, cercano, profesional. Emojis tropicales 🌴🌞🍍.
-
-🪄 PRIMERA INTERACCIÓN OBLIGATORIA:
-Hi! 🌞 I’m MELISA — your tropical creative director at TRÓPICA. I’ll help you shape a complete, strategic, and beautiful brief with a warm human touch.
-Before we dive in — where are you from, and which language would you like to continue in?
+💬 TONO: Cálido, inspirador y experto. Emojis: 🌴✨🌊.
 `;
 
 let conversationHistory = [];
@@ -232,58 +233,63 @@ async function descargarBrief() {
     try {
         const { PDFDocument, rgb, StandardFonts } = PDFLib;
 
-        // 1. Obtener la plantilla original
         const templateUrl = 'assets/Brief template.pdf';
         const response = await fetch(templateUrl);
         if (!response.ok) throw new Error("No se pudo cargar la plantilla PDF.");
         const templateBytes = await response.arrayBuffer();
 
-        // 2. Cargar el PDF
         const pdfDoc = await PDFDocument.load(templateBytes);
         const pages = pdfDoc.getPages();
         const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
         const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-        // 3. Obtener el contenido del brief
         const finalSummary = getFinalBriefContent();
 
         if (!finalSummary) {
-            alert("Aún no hay un brief final para descargar. Sigue conversando con MELISA.");
+            alert("Aún no hay un brief final para descargar.");
             return;
         }
 
-        // 4. Llenar el PDF (Overlay dinámico)
         const sections = finalSummary.split("\n");
         let currentPage = pages[0];
         let y = currentPage.getHeight() - 100;
         const margin = 50;
-        const fontSize = 10;
-        const lineHeight = 14;
+        const fontSize = 9;
+        const lineHeight = 12;
 
-        for (const line of sections) {
-            if (line.trim() === "" || line.includes("---")) continue;
+        for (let line of sections) {
+            line = line.replace(/^\s*[\*\-\•]\s*/, "• "); // Normalizar viñetas
+            const isMarkdownTitle = line.startsWith("###");
+            const cleanLine = line.replace(/###\s*/, "").replace(/\*\*/g, "").trim();
 
-            // Detectar títulos (empiezan con número o son mayúsculas)
-            const isTitle = line.match(/^\d+[\)\.]/) || line.match(/^[A-Z\s]{5,}$/);
+            if (cleanLine === "" || line.startsWith("---")) {
+                y -= 5;
+                continue;
+            }
+
+            const isTitle = isMarkdownTitle || cleanLine.match(/^\d+[\)\.]/) || cleanLine.match(/^[A-Z\s]{5,}$/);
+            const isBullet = line.startsWith("•");
+
             const currentFont = isTitle ? boldFont : font;
             const currentSize = isTitle ? fontSize + 2 : fontSize;
+            const xPos = isBullet ? margin + 10 : margin;
 
-            const words = line.split(" ");
-            let currentLine = "";
+            const words = cleanLine.split(" ");
+            let currentLineText = "";
             for (const word of words) {
-                const testLine = currentLine + word + " ";
+                const testLine = currentLineText + word + " ";
                 const width = currentFont.widthOfTextAtSize(testLine, currentSize);
 
-                if (width > currentPage.getWidth() - (margin * 2)) {
-                    currentPage.drawText(currentLine, { x: margin, y: y, size: currentSize, font: currentFont });
+                if (width > currentPage.getWidth() - (margin * 2) - (isBullet ? 10 : 0)) {
+                    currentPage.drawText(currentLineText, { x: xPos, y: y, size: currentSize, font: currentFont });
                     y -= lineHeight;
-                    currentLine = word + " ";
+                    currentLineText = word + " ";
                 } else {
-                    currentLine = testLine;
+                    currentLineText = testLine;
                 }
             }
-            currentPage.drawText(currentLine, { x: margin, y: y, size: currentSize, font: currentFont });
-            y -= lineHeight + (isTitle ? 5 : 2);
+            currentPage.drawText(currentLineText, { x: xPos, y: y, size: currentSize, font: currentFont });
+            y -= lineHeight + (isTitle ? 4 : 2);
 
             if (y < 60) {
                 const pageIndex = pages.indexOf(currentPage);
@@ -301,31 +307,27 @@ async function descargarBrief() {
         const blob = new Blob([pdfBytes], { type: 'application/pdf' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = "Brief_Trópica_Final.pdf";
+        link.download = "Brief_Trópica_Premium.pdf";
         link.click();
 
     } catch (e) {
-        console.error("Error al generar el PDF:", e);
-        alert("Aviso: No se pudo llenar la plantilla original (" + e.message + "). Se generará un PDF básico.");
+        console.error("Error PDF:", e);
         descargarBriefSimple();
     }
 }
 
-// Fallback: Genera un PDF sin plantilla, solo con el contenido del brief
 function descargarBriefSimple() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
-
     const finalSummary = getFinalBriefContent();
 
-    // Estética básica
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(22);
-    doc.setTextColor(243, 156, 18); // Naranja Trópica
+    doc.setFontSize(20);
+    doc.setTextColor(243, 156, 18);
     doc.text("TRÓPICA - ESTRATEGIA CREATIVA", 20, 20);
 
-    doc.setFontSize(16);
-    doc.text("Brief Estratégico Final", 20, 32);
+    doc.setFontSize(14);
+    doc.text("Documento Estratégico de Campaña", 20, 30);
 
     let y = 45;
     const width = 170;
@@ -334,24 +336,30 @@ function descargarBriefSimple() {
     const sections = finalSummary.split("\n");
 
     sections.forEach((line) => {
-        if (line.trim() === "" || line.includes("---")) return;
+        let processedLine = line.replace(/^\s*[\*\-\•]\s*/, "• ");
+        if (processedLine.trim() === "" || processedLine.startsWith("---")) return;
 
-        const isTitle = line.match(/^\d+[\)\.]/) || line.match(/^[A-Z\s]{5,}$/);
+        const isTitle = processedLine.startsWith("###") || processedLine.match(/^\d+[\)\.]/) || processedLine.match(/^[A-Z\s]{5,}$/);
+        const cleanText = processedLine.replace(/###\s*/, "").replace(/\*\*/g, "").trim();
+        const isBullet = processedLine.startsWith("•");
+
         doc.setFont("helvetica", isTitle ? "bold" : "normal");
-        doc.setFontSize(isTitle ? 12 : 10);
-        doc.setTextColor(isTitle ? 0 : 60);
+        doc.setFontSize(isTitle ? 11 : 10);
+        doc.setTextColor(isTitle ? 0 : 50);
 
-        const splitText = doc.splitTextToSize(line, width);
+        const xPos = isBullet ? margin + 5 : margin;
+        const splitText = doc.splitTextToSize(cleanText, width - (isBullet ? 5 : 0));
 
-        if (y + (splitText.length * 7) > 280) {
+        if (y + (splitText.length * 6) > 280) {
             doc.addPage();
             y = 20;
         }
 
-        doc.text(splitText, margin, y);
-        y += (splitText.length * 6) + (isTitle ? 4 : 2);
+        doc.text(splitText, xPos, y);
+        y += (splitText.length * 5) + (isTitle ? 3 : 1);
     });
 
     doc.save("Brief_Trópica_Simple.pdf");
 }
+
 
