@@ -1,0 +1,10 @@
+{
+    "name": "melisa-tropica",
+    "version": "1.0.0",
+    "type": "module",
+    "description": "Tropical Creative Director Chatbot",
+    "main": "index.html",
+    "dependencies": {
+        "@vercel/node": "latest"
+    }
+}
