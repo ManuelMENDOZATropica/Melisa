@@ -139,13 +139,11 @@ async function llamarAPI(originalText) {
         });
 
         if (!res.ok) {
-            let errorMsg = "Error en el servidor";
+            let errorMsg = `Server Status: ${res.status} ${res.statusText}`;
             try {
-                const errorData = await res.json();
-                errorMsg = errorData.details || errorData.error || JSON.stringify(errorData);
-            } catch (jsonErr) {
-                errorMsg = await res.text() || res.statusText;
-            }
+                const text = await res.text();
+                errorMsg += ` - Body: ${text.substring(0, 100)}`;
+            } catch (e) { }
             throw new Error(errorMsg);
         }
 
