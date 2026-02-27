@@ -1,5 +1,5 @@
 export const config = {
-    runtime: 'edge',
+    runtime: 'edge', // Triggering fresh deploy
 };
 
 export default async function handler(req) {
