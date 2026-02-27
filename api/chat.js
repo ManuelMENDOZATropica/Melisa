@@ -10,8 +10,8 @@ export default async function handler(req, res) {
     }
 
     try {
-        // Usamos el modelo exacto que funcionaba antes
-        const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:streamGenerateContent?key=${apiKey}&alt=sse`;
+        // Usamos el modelo estándar que funciona siempre
+        const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:streamGenerateContent?key=${apiKey}&alt=sse`;
 
         const response = await fetch(url, {
             method: 'POST',
@@ -20,14 +20,12 @@ export default async function handler(req, res) {
         });
 
         if (!response.ok) {
-            const errorText = await response.text();
-            return res.status(response.status).json({ error: "Google API Error", details: errorText });
+            const errorRaw = await response.text();
+            return res.status(response.status).send(errorRaw);
         }
 
-        // Headers para streaming en Node.js
         res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
         res.setHeader('Cache-Control', 'no-cache, no-transform');
-        res.setHeader('X-Content-Type-Options', 'nosniff');
         res.setHeader('Connection', 'keep-alive');
 
         const reader = response.body.getReader();
