@@ -125,10 +125,10 @@ async function llamarAPI(originalText) {
     const url = `/api/chat`;
 
     const payload = {
-        contents: [
-            { role: "user", parts: [{ text: "SYSTEM INSTRUCTION (OBEY THIS): " + SYSTEM_PROMPT }] },
-            ...conversationHistory
-        ]
+        system_instruction: {
+            parts: [{ text: SYSTEM_PROMPT }]
+        },
+        contents: conversationHistory
     };
 
     try {
