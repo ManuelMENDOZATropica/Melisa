@@ -18,8 +18,8 @@ export default async function handler(req) {
 
     try {
         const body = await req.json();
-        // Usamos v1beta y gemini-1.5-flash
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?key=${apiKey}&alt=sse`;
+        // Volvemos a v1 (estable) con gemini-1.5-flash
+        const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:streamGenerateContent?key=${apiKey}&alt=sse`;
 
         const response = await fetch(url, {
             method: 'POST',
@@ -29,13 +29,12 @@ export default async function handler(req) {
 
         if (!response.ok) {
             const errorData = await response.text();
-            return new Response(JSON.stringify({ error: "Gemini API Error", details: errorData }), {
+            return new Response(JSON.stringify({ error: "Error de Google API", details: errorData }), {
                 status: response.status,
                 headers: { 'Content-Type': 'application/json' }
             });
         }
 
-        // Importante: No consumimos el cuerpo aquí, lo pasamos directo
         return new Response(response.body, {
             headers: {
                 'Content-Type': 'text/event-stream; charset=utf-8',
