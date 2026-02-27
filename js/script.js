@@ -116,6 +116,16 @@ async function llamarAPI(originalText) {
     const key = CONFIG.GEMINI_API_KEY;
     const chat = document.getElementById('chat-window');
 
+    if (!key) {
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'msg bot';
+        errorDiv.style.color = "#fb7185";
+        errorDiv.innerText = "❌ Error: API Key no cargada. Asegúrate de que el archivo .env sea accesible y que estés usando un servidor local (e.g., Live Server).";
+        chat.appendChild(errorDiv);
+        chat.scrollTop = chat.scrollHeight;
+        return;
+    }
+
     const botDiv = document.createElement('div');
     botDiv.className = 'msg bot';
     botDiv.innerHTML = createLoadingDots();
