@@ -1,48 +1,46 @@
-export const config = {
-    runtime: 'edge',
-};
-
-export default async function handler(req) {
+export default async function handler(req, res) {
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
-        return new Response(JSON.stringify({ error: "API Key missing" }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return res.status(500).json({ error: "API Key missing" });
+    }
+
+    if (req.method !== 'POST') {
+        return res.status(405).json({ error: "Method not allowed" });
     }
 
     try {
-        const body = await req.json();
-        // Usamos exactamente lo que funcionaba antes: gemini-2.0-flash
+        // Usamos el modelo exacto que funcionaba antes
         const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:streamGenerateContent?key=${apiKey}&alt=sse`;
 
         const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
+            body: JSON.stringify(req.body),
         });
 
         if (!response.ok) {
-            const errorData = await response.text();
-            return new Response(errorData, {
-                status: response.status,
-                headers: { 'Content-Type': 'application/json' }
-            });
+            const errorText = await response.text();
+            return res.status(response.status).json({ error: "Google API Error", details: errorText });
         }
 
-        return new Response(response.body, {
-            headers: {
-                'Content-Type': 'text/event-stream; charset=utf-8',
-                'Cache-Control': 'no-cache, no-transform',
-                'X-Content-Type-Options': 'nosniff',
-                'Connection': 'keep-alive',
-            },
-        });
+        // Headers para streaming en Node.js
+        res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-cache, no-transform');
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Connection', 'keep-alive');
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            res.write(value);
+        }
+
+        res.end();
     } catch (error) {
-        return new Response(JSON.stringify({ error: error.message }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-        });
+        res.status(500).json({ error: error.message });
     }
 }
