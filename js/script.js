@@ -138,7 +138,10 @@ async function llamarAPI(originalText) {
             body: JSON.stringify(payload)
         });
 
-        if (!res.ok) throw new Error("Error en la respuesta del servidor");
+        if (!res.ok) {
+            const errorData = await res.json();
+            throw new Error(errorData.details || errorData.error || "Error desconocido en el servidor");
+        }
 
         const reader = res.body.getReader();
         const decoder = new TextDecoder("utf-8");
