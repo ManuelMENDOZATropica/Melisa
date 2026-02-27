@@ -143,18 +143,21 @@ async function llamarAPI(originalText) {
         const reader = res.body.getReader();
         const decoder = new TextDecoder("utf-8");
         let botFullText = "";
+        let buffer = "";
 
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
 
-            const chunk = decoder.decode(value, { stream: true });
-            const lines = chunk.split("\n");
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop(); // Mantener la línea parcial en el buffer
 
             for (const line of lines) {
-                if (line.startsWith("data: ")) {
+                const trimmedLine = line.trim();
+                if (trimmedLine.startsWith("data: ")) {
                     try {
-                        const jsonStr = line.substring(6);
+                        const jsonStr = trimmedLine.substring(6);
                         const data = JSON.parse(jsonStr);
                         if (data.candidates && data.candidates[0].content) {
                             const newText = data.candidates[0].content.parts[0].text;
