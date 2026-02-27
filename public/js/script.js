@@ -1,7 +1,7 @@
 const SYSTEM_PROMPT = `
 🎛️ FUNCIONAMIENTO GENERAL
 MELISSA dirige la conversación. Eres una Directora Creativa Tropical en TRÓPICA.
-Tu objetivo es guiar al usuario para completar un brief estratégico.
+Tu objetivo es guiar al usuario para completar un brief estratégico de alto nivel.
 
 🚀 ORDEN OBLIGATORIO DE CONVERSACIÓN (NO SALTAR PASOS):
 1. **Idioma/Origen**: (Ya hecho en la primera interacción).
@@ -10,8 +10,11 @@ Tu objetivo es guiar al usuario para completar un brief estratégico.
 4. **Solicitud de Brief**: Pide el PDF o DOCX ("¿Puedes compartir el brief...?"). **IMPORTANTE**: En el mismo mensaje, invita a seguir si no lo tienen: "Si no lo tienes, ¡no hay problema! Empecemos nosotros. Cuéntame: ¿[Primera Pregunta del Challenge]?".
 5. **Entrevista Guiada**: Sigue el orden del DOCX (Challenge, Strategic Foundation, etc.). Haz preguntas cortas, conversadas y de una en una.
 
-🚀 RESULTADO FINAL (CUANDO YA TENGAS TODO):
-Cuando la conversación termine, genera un bloque de texto que empiece con "--- RESUMEN FINAL PARA DOCUMENTO ---".
+🚀 RESULTADO FINAL (BRIEF COMPLETO):
+Cuando consideres que tienes información suficiente o el usuario pida el resultado final, genera el BRIEF COMPLETO.
+DEBE ser un documento exhaustivo, profesional y creativo, NO un resumen de la charla.
+Empieza OBLIGATORIAMENTE con la línea: "--- RESUMEN FINAL PARA DOCUMENTO ---".
+
 Organízalo por estas secciones exactas:
 1. PAÍS DEL PROYECTO
 2. THE CHALLENGE
@@ -25,6 +28,7 @@ Organízalo por estas secciones exactas:
 10. APPENDIX FINAL
 
 🚀 REGLAS CRÍTICAS:
+- **BRIEF, NO TRANSCRIPT**: El documento final debe ser una pieza de estrategia redactada, no una lista de "dijiste esto".
 - **UNA PREGUNTA A LA VEZ**: Fundamental para no saturar.
 - **NO MENCIONES "FASES"**: Habla de forma natural y cálida.
 - **MARKDOWN**: Usa negritas y títulos (###).
@@ -179,7 +183,7 @@ async function llamarAPI(originalText) {
 
         conversationHistory.push({ role: "model", parts: [{ text: botFullText }] });
 
-        const searchTerms = ["resumen final", "appendix final", "brief final"];
+        const searchTerms = ["resumen final para documento", "--- resumen final", "brief completo"];
         if (searchTerms.some(term => botFullText.toLowerCase().includes(term))) {
             document.getElementById('downloadBtn').style.display = 'inline-block';
         }
@@ -195,6 +199,35 @@ async function llamarAPI(originalText) {
     }
 }
 
+/**
+ * Busca en el historial el bloque del resumen final.
+ * Si no lo encuentra, devuelve el último mensaje del modelo.
+ */
+function getFinalBriefContent() {
+    let finalSummary = "";
+    // Buscar el bloque marcado explícitamente
+    for (let i = conversationHistory.length - 1; i >= 0; i--) {
+        const text = conversationHistory[i].parts[0].text;
+        if (text.includes("--- RESUMEN FINAL PARA DOCUMENTO ---")) {
+            // Extraer solo lo que va después del marcador
+            const parts = text.split("--- RESUMEN FINAL PARA DOCUMENTO ---");
+            finalSummary = parts[parts.length - 1].trim();
+            break;
+        }
+    }
+
+    // Si no hay marcador, buscar el último mensaje de Melissa
+    if (!finalSummary) {
+        for (let i = conversationHistory.length - 1; i >= 0; i--) {
+            if (conversationHistory[i].role === "model") {
+                finalSummary = conversationHistory[i].parts[0].text;
+                break;
+            }
+        }
+    }
+    return finalSummary;
+}
+
 async function descargarBrief() {
     try {
         const { PDFDocument, rgb, StandardFonts } = PDFLib;
@@ -202,6 +235,7 @@ async function descargarBrief() {
         // 1. Obtener la plantilla original
         const templateUrl = 'assets/Brief template.pdf';
         const response = await fetch(templateUrl);
+        if (!response.ok) throw new Error("No se pudo cargar la plantilla PDF.");
         const templateBytes = await response.arrayBuffer();
 
         // 2. Cargar el PDF
@@ -210,33 +244,18 @@ async function descargarBrief() {
         const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
         const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-        // 3. Extraer el resumen final del historial
-        let finalSummary = "";
-        for (let i = conversationHistory.length - 1; i >= 0; i--) {
-            const text = conversationHistory[i].parts[0].text;
-            if (text.includes("--- RESUMEN FINAL PARA DOCUMENTO ---")) {
-                finalSummary = text;
-                break;
-            }
-        }
+        // 3. Obtener el contenido del brief
+        const finalSummary = getFinalBriefContent();
 
-        // Si no hay resumen formateado, usar el último mensaje de Melissa
         if (!finalSummary) {
-            for (let i = conversationHistory.length - 1; i >= 0; i--) {
-                if (conversationHistory[i].role === "model") {
-                    finalSummary = conversationHistory[i].parts[0].text;
-                    break;
-                }
-            }
+            alert("Aún no hay un brief final para descargar. Sigue conversando con MELISA.");
+            return;
         }
 
         // 4. Llenar el PDF (Overlay dinámico)
-        // Como no conocemos los campos exactos, escribiremos el texto por secciones en las páginas
-        // Si hay campos de formulario, se llenarían así: const form = pdfDoc.getForm();
-
         const sections = finalSummary.split("\n");
         let currentPage = pages[0];
-        let y = currentPage.getHeight() - 100; // Empezar un poco abajo de la cabecera
+        let y = currentPage.getHeight() - 100;
         const margin = 50;
         const fontSize = 10;
         const lineHeight = 14;
@@ -244,11 +263,11 @@ async function descargarBrief() {
         for (const line of sections) {
             if (line.trim() === "" || line.includes("---")) continue;
 
-            const isTitle = line.match(/^\d+\)/) || line.match(/^[A-Z\s]+$/);
+            // Detectar títulos (empiezan con número o son mayúsculas)
+            const isTitle = line.match(/^\d+[\)\.]/) || line.match(/^[A-Z\s]{5,}$/);
             const currentFont = isTitle ? boldFont : font;
             const currentSize = isTitle ? fontSize + 2 : fontSize;
 
-            // Dividir líneas largas
             const words = line.split(" ");
             let currentLine = "";
             for (const word of words) {
@@ -264,23 +283,20 @@ async function descargarBrief() {
                 }
             }
             currentPage.drawText(currentLine, { x: margin, y: y, size: currentSize, font: currentFont });
-            y -= lineHeight + (isTitle ? 5 : 0);
+            y -= lineHeight + (isTitle ? 5 : 2);
 
-            // Saltar a la siguiente página si se acaba el espacio
-            if (y < 50) {
+            if (y < 60) {
                 const pageIndex = pages.indexOf(currentPage);
                 if (pageIndex < pages.length - 1) {
                     currentPage = pages[pageIndex + 1];
-                    y = currentPage.getHeight() - 50;
+                    y = currentPage.getHeight() - 60;
                 } else {
-                    // Si no hay más páginas en el template, añadir una nueva blanca
                     currentPage = pdfDoc.addPage();
-                    y = currentPage.getHeight() - 50;
+                    y = currentPage.getHeight() - 60;
                 }
             }
         }
 
-        // 5. Guardar y descargar
         const pdfBytes = await pdfDoc.save();
         const blob = new Blob([pdfBytes], { type: 'application/pdf' });
         const link = document.createElement('a');
@@ -290,33 +306,52 @@ async function descargarBrief() {
 
     } catch (e) {
         console.error("Error al generar el PDF:", e);
-        alert("¡Upps! No pude llenar el template original: " + e.message + "\nProbando descarga de texto simple...");
-        // Fallback al método anterior si algo falla
+        alert("Aviso: No se pudo llenar la plantilla original (" + e.message + "). Se generará un PDF básico.");
         descargarBriefSimple();
     }
 }
 
-// Fallback por si el template falla (clon del método anterior)
+// Fallback: Genera un PDF sin plantilla, solo con el contenido del brief
 function descargarBriefSimple() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
+
+    const finalSummary = getFinalBriefContent();
+
+    // Estética básica
     doc.setFont("helvetica", "bold");
     doc.setFontSize(22);
-    doc.setTextColor(243, 156, 18);
+    doc.setTextColor(243, 156, 18); // Naranja Trópica
     doc.text("TRÓPICA - ESTRATEGIA CREATIVA", 20, 20);
+
+    doc.setFontSize(16);
+    doc.text("Brief Estratégico Final", 20, 32);
 
     let y = 45;
     const width = 170;
+    const margin = 20;
 
-    conversationHistory.forEach((msg) => {
-        if (msg.parts[0].text.startsWith("[DOCUMENTO ADJUNTO")) return;
-        const role = msg.role === "user" ? "Tú: " : "Melissa: ";
-        const text = msg.parts[0].text;
-        const splitText = doc.splitTextToSize(role + text, width);
-        if (y + (splitText.length * 7) > 280) { doc.addPage(); y = 20; }
-        doc.setFont("helvetica", msg.role === "user" ? "bold" : "normal");
-        doc.text(splitText, 20, y);
-        y += (splitText.length * 7) + 5;
+    const sections = finalSummary.split("\n");
+
+    sections.forEach((line) => {
+        if (line.trim() === "" || line.includes("---")) return;
+
+        const isTitle = line.match(/^\d+[\)\.]/) || line.match(/^[A-Z\s]{5,}$/);
+        doc.setFont("helvetica", isTitle ? "bold" : "normal");
+        doc.setFontSize(isTitle ? 12 : 10);
+        doc.setTextColor(isTitle ? 0 : 60);
+
+        const splitText = doc.splitTextToSize(line, width);
+
+        if (y + (splitText.length * 7) > 280) {
+            doc.addPage();
+            y = 20;
+        }
+
+        doc.text(splitText, margin, y);
+        y += (splitText.length * 6) + (isTitle ? 4 : 2);
     });
-    doc.save("Brief_MELISA_Respaldo.pdf");
+
+    doc.save("Brief_Trópica_Simple.pdf");
 }
+
