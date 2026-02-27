@@ -113,18 +113,7 @@ async function enviar() {
 }
 
 async function llamarAPI(originalText) {
-    const key = CONFIG.GEMINI_API_KEY;
     const chat = document.getElementById('chat-window');
-
-    if (!key) {
-        const errorDiv = document.createElement('div');
-        errorDiv.className = 'msg bot';
-        errorDiv.style.color = "#fb7185";
-        errorDiv.innerText = "❌ Error: API Key no cargada. Asegúrate de que el archivo .env sea accesible y que estés usando un servidor local (e.g., Live Server).";
-        chat.appendChild(errorDiv);
-        chat.scrollTop = chat.scrollHeight;
-        return;
-    }
 
     const botDiv = document.createElement('div');
     botDiv.className = 'msg bot';
@@ -132,7 +121,8 @@ async function llamarAPI(originalText) {
     chat.appendChild(botDiv);
     chat.scrollTop = chat.scrollHeight;
 
-    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:streamGenerateContent?key=${key}&alt=sse`;
+    // Ahora llamamos a nuestro proxy en Vercel
+    const url = `/api/chat`;
 
     const payload = {
         contents: [
@@ -147,6 +137,8 @@ async function llamarAPI(originalText) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
+
+        if (!res.ok) throw new Error("Error en la respuesta del servidor");
 
         const reader = res.body.getReader();
         const decoder = new TextDecoder("utf-8");
