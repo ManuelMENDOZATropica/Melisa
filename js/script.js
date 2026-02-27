@@ -190,14 +190,10 @@ async function llamarAPI(originalText) {
         console.error("DEBUG ERROR COMPLETO:", e);
         botDiv.style.color = "#fb7185";
 
-        let errorFinal = "Error de red: ";
-        if (e && e.message) {
-            errorFinal += e.message;
-        } else {
-            errorFinal += JSON.stringify(e);
-        }
+        let errorTexto = String(e);
+        if (e && e.message) errorTexto = e.message;
 
-        botDiv.innerText = errorFinal;
+        botDiv.innerText = "Error de red: " + errorTexto;
     }
 }
 
