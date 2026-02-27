@@ -189,7 +189,17 @@ async function llamarAPI(originalText) {
     } catch (e) {
         console.error("DEBUG ERROR:", e);
         botDiv.style.color = "#fb7185";
-        botDiv.innerText = "Error de red: " + (typeof e === 'string' ? e : (e.message || JSON.stringify(e)));
+
+        let mensajeVisible = "Error de conexión";
+        if (e instanceof Error) {
+            mensajeVisible = e.message;
+        } else if (typeof e === 'object') {
+            mensajeVisible = JSON.stringify(e);
+        } else {
+            mensajeVisible = String(e);
+        }
+
+        botDiv.innerText = "Error de red: " + mensajeVisible;
     }
 }
 
