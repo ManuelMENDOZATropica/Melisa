@@ -6,12 +6,13 @@ export default async function handler(req) {
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
-        return new Response(JSON.stringify({ error: "API Key missing" }), { status: 500 });
+        return new Response(JSON.stringify({ error: "Gemini API Key is not set in Vercel environment variables." }), { status: 500 });
     }
 
     try {
         const body = await req.json();
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?key=${apiKey}&alt=sse`;
+        // Usamos el modelo más nuevo: gemini-2.5-flash en v1beta
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?key=${apiKey}&alt=sse`;
 
         const response = await fetch(url, {
             method: 'POST',
