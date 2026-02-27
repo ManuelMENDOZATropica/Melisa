@@ -1,40 +1,57 @@
-export default async function handler(req, res) {
+export const config = {
+    runtime: 'edge',
+};
+
+export default async function handler(req) {
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
-        return res.status(500).json({ error: "API Key no configurada en Vercel" });
+        return new Response(JSON.stringify({ error: "API Key no configurada en Vercel" }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' },
+        });
     }
 
     if (req.method !== 'POST') {
-        return res.status(405).json({ error: "Método no permitido" });
+        return new Response(JSON.stringify({ error: "Método no permitido" }), {
+            status: 405,
+            headers: { 'Content-Type': 'application/json' },
+        });
     }
 
     try {
-        const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:streamGenerateContent?key=${apiKey}&alt=sse`;
+        const body = await req.json();
+        // Usamos gemini-1.5-flash que es el más estable y rápido para este tipo de apps
+        const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:streamGenerateContent?key=${apiKey}&alt=sse`;
 
         const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(req.body)
+            body: JSON.stringify(body),
         });
 
-        // Reenviar el flujo de datos (streaming) al cliente
-        res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive');
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            res.write(value);
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error("Error de Google:", errorText);
+            return new Response(JSON.stringify({ error: "Error en la API de Google", details: errorText }), {
+                status: response.status,
+                headers: { 'Content-Type': 'application/json' },
+            });
         }
 
-        res.end();
+        // Devolvemos el chorro de datos directamente al navegador
+        return new Response(response.body, {
+            headers: {
+                'Content-Type': 'text/event-stream',
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+            },
+        });
     } catch (error) {
-        console.error("Error en el proxy de Gemini:", error);
-        res.status(500).json({ error: "Error al conectar con Gemini" });
+        console.error("Error en Edge Function:", error);
+        return new Response(JSON.stringify({ error: "Error interno en el servidor" }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' },
+        });
     }
 }
