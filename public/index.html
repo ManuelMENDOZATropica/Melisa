@@ -1,46 +1,75 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MELISA | Trópica</title>
+    <meta name="description"
+        content="MELISA — Tu directora creativa tropical en TRÓPICA. Te ayuda a construir briefs completos, estratégicos y hermosos.">
+    <title>MELISA | Trópica × Mercado Libre</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
     <link rel="stylesheet" href="css/style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
-
 </head>
 
 <body>
 
-    <div class="header">
-        <h1>TRÓPICA 🌴</h1>
-        <p>MELISA — Tropical Creative Director</p>
-        <button id="downloadBtn" onclick="descargarBrief()"
-            style="display:none; margin-top: 1rem; background: white; color: var(--accent); padding: 0.5rem 1.5rem;">Descargar
-            Brief PDF</button>
-    </div>
-
-    <div id="chat-window">
-        <!-- Primer mensaje obligatorio de MELISA -->
-        <div class="msg bot">
-            Hi! 🌞 I’m MELISA — your tropical creative director at TRÓPICA. I’ll help you shape a complete, strategic,
-            and beautiful brief with a warm human touch.<br><br>
-            Before we dive in — where are you from, and which language would you like to continue in?
+    <!-- ── Header ─────────────────────────────────────── -->
+    <header class="header">
+        <div class="header-logo">
+            <img src="assets/logo Mercadolibre.svg" alt="Mercado Libre" class="header-logo-img">
         </div>
-    </div>
 
-    <div class="input-group">
-        <input type="file" id="fileInput" style="display: none;" accept=".pdf,.docx" onchange="handleFileUpload(this)">
-        <button onclick="document.getElementById('fileInput').click()"
-            style="padding: 1rem; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center;">📎</button>
-        <input type="text" id="userInput" placeholder="Escribe tu respuesta aquí..."
-            onkeypress="if(event.key==='Enter') enviar()">
-        <button onclick="enviar()">Enviar</button>
-    </div>
+        <!-- Hidden elements kept for JS compatibility -->
+        <h1 style="display:none">TRÓPICA</h1>
+        <p style="display:none">MELISA</p>
+        <button id="downloadBtn" onclick="descargarBrief()" style="display:none">Descargar Brief PDF</button>
+    </header>
+
+    <!-- ── Page Body ───────────────────────────────────── -->
+    <div class="page-body">
+
+        <!-- Chat window -->
+        <div id="chat-window">
+            <!-- Date separator -->
+            <div class="chat-date-separator" id="initial-date-separator">
+                <!-- injected by JS or static -->
+                02 de marzo
+            </div>
+
+            <!-- First bot message -->
+            <div class="msg bot" id="initial-bot-msg">
+                Hi! I'm MELISA — your tropical creative director at <strong>TRÓPICA</strong>.
+                I'll help you shape a complete, strategic, and beautiful brief with a warm human touch.<br><br>
+                Before we dive in — where are you from, and which language would you like to continue in?
+            </div>
+        </div>
+
+        <!-- Input area -->
+        <div class="input-group">
+            <input type="file" id="fileInput" style="display:none;" accept=".pdf,.docx"
+                onchange="handleFileUpload(this)">
+
+            <button id="attachBtn" class="btn-attach" onclick="document.getElementById('fileInput').click()"
+                title="Adjuntar archivo">
+                📎
+            </button>
+
+            <input type="text" id="userInput" placeholder="Escribe aquí..."
+                onkeypress="if(event.key==='Enter') enviar()">
+
+            <button id="sendBtn" class="btn-send" onclick="enviar()">
+                Enviar
+            </button>
+        </div>
+
+    </div><!-- /page-body -->
 
     <script src="js/script.js"></script>
 </body>
