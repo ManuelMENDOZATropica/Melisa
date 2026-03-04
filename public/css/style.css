@@ -366,3 +366,25 @@ body::before {
         padding: 11px 18px;
     }
 }
+
+/* ─── Disclaimer ──────────────────────────────────────────────── */
+.disclaimer {
+    font-size: 0.72rem;
+    color: #888;
+    text-align: center;
+    margin-top: 10px;
+    letter-spacing: 0.1px;
+    line-height: 1.5;
+}
+
+.disclaimer a {
+    color: var(--ml-blue);
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.2s;
+}
+
+.disclaimer a:hover {
+    color: var(--ml-dark);
+    text-decoration: underline;
+}
