@@ -175,7 +175,7 @@ async function extractTextFromDocx(file) {
 }
 
 async function enviarDocTexto(texto, nombre) {
-    const promptEspecial = `[DOCUMENTO ADJUNTO: ${nombre}]\n${texto}\n\nAnaliza este documento y dame tu feedback inicial (puntos fuertes y débiles). Luego, hazme la PRIMERA PREGUNTA necesaria para completar el brief. Una sola pregunta por favor.`;
+    const promptEspecial = `[DOCUMENTO ADJUNTO: ${nombre}]\n${texto}\n\nAnaliza este documento en silencio. NO muestres al usuario el contenido que encontraste, ni hagas un resumen ni feedback de lo que contiene. Identifica internamente qué pasos del flujo del brief (del BLOQUE 1 al 6) ya están cubiertos con la información del documento. Luego, haz SOLO la primera pregunta del primer paso que aún NO esté cubierto. Una sola pregunta.`;
     conversationHistory.push({ role: "user", parts: [{ text: promptEspecial }] });
     await llamarAPI("");
 }
@@ -196,7 +196,7 @@ async function enviar() {
     await llamarAPI(text);
 }
 
-async function llamarAPI(originalText) {
+async function llamarAPI(originalText, _retry = true) {
     const chat = document.getElementById('chat-window');
 
     const botDiv = document.createElement('div');
@@ -205,14 +205,17 @@ async function llamarAPI(originalText) {
     chat.appendChild(botDiv);
     chat.scrollTop = chat.scrollHeight;
 
-    // Ahora llamamos a nuestro proxy en Vercel
     const url = `/api/chat`;
+
+    // Limitar historial a los últimos 20 mensajes para evitar payloads grandes
+    // que provocan ERR_HTTP2_SERVER_REFUSED_STREAM en Vercel Edge
+    const historyToSend = conversationHistory.slice(-20);
 
     const payload = {
         system_instruction: {
             parts: [{ text: SYSTEM_PROMPT }]
         },
-        contents: conversationHistory
+        contents: historyToSend
     };
 
     try {
@@ -242,7 +245,7 @@ async function llamarAPI(originalText) {
 
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split("\n");
-            buffer = lines.pop(); // Mantener la línea parcial en el buffer
+            buffer = lines.pop();
 
             for (const line of lines) {
                 const trimmedLine = line.trim();
@@ -263,20 +266,40 @@ async function llamarAPI(originalText) {
 
         conversationHistory.push({ role: "model", parts: [{ text: botFullText }] });
 
+        // Detectar brief completo e inyectar botón de descarga como burbuja en el chat
         const searchTerms = ["resumen final para documento", "--- resumen final", "brief completo"];
         if (searchTerms.some(term => botFullText.toLowerCase().includes(term))) {
-            document.getElementById('downloadBtn').style.display = 'inline-block';
+            showDownloadBubble();
         }
 
     } catch (e) {
+        // Reintentar una vez en errores de red (ej. ERR_HTTP2_SERVER_REFUSED_STREAM)
+        if (_retry) {
+            botDiv.remove();
+            await new Promise(r => setTimeout(r, 2000));
+            await llamarAPI(originalText, false);
+            return;
+        }
         console.error("DEBUG ERROR COMPLETO:", e);
         botDiv.style.color = "#fb7185";
-
         let errorTexto = String(e);
         if (e && e.message) errorTexto = e.message;
-
-        botDiv.innerText = "Error de red: " + errorTexto;
+        botDiv.innerText = "⚠️ Hubo un error de conexión. Por favor intenta de nuevo.";
     }
+}
+
+function showDownloadBubble() {
+    const chat = document.getElementById('chat-window');
+    const dlDiv = document.createElement('div');
+    dlDiv.className = 'msg bot';
+    dlDiv.innerHTML = `
+        <p>✅ ¡Tu brief está listo! Puedes descargarlo ahora:</p>
+        <button class="btn-download-brief" onclick="descargarBrief()">
+            📄 Descargar Brief PDF
+        </button>
+    `;
+    chat.appendChild(dlDiv);
+    chat.scrollTop = chat.scrollHeight;
 }
 
 /**
