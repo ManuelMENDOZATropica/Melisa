@@ -38,9 +38,14 @@ body {
     background-color: var(--page-bg);
     display: flex;
     flex-direction: column;
+    /* dvh = dynamic viewport height: se ajusta cuando aparecen/desaparecen
+       las barras del navegador en mobile. Fallback a 100vh para browsers viejos. */
     height: 100vh;
+    height: 100dvh;
     overflow: hidden;
     position: relative;
+    /* Respeta el área segura en iPhones (notch, home bar) */
+    padding-bottom: env(safe-area-inset-bottom);
 }
 
 /* ─── Topographic Background Pattern ───────────────────────── */
@@ -316,7 +321,8 @@ body::before {
 /* ─── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 600px) {
     .page-body {
-        padding: 16px 10px 16px;
+        /* padding-bottom extra para no tapar con la home bar de iPhone */
+        padding: 16px 10px max(16px, env(safe-area-inset-bottom));
     }
 
     #chat-window {
