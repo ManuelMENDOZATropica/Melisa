@@ -150,28 +150,88 @@ let conversationHistory = [];
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 // ── Brief Progress Tracker ──────────────────────────────────────
-// Progress = (user answers given) / TOTAL_STEPS * 100
-// Each real user message counts as one answered question.
-// Internal document-upload prompts (start with "[DOCUMENTO ADJUNTO:") are excluded.
+// Progress = max(userAnswers, stepReachedViaDoc) / TOTAL_STEPS
+//  · userAnswers  = real messages sent by the user (no doc-upload prompts)
+//  · stepReachedViaDoc = when a PDF covers questions, the bot jumps ahead;
+//    we detect which step it jumped TO by scanning the bot reply that
+//    immediately follows each [DOCUMENTO ADJUNTO:] prompt.
+//    Steps BEFORE that jump = covered by the document.
 const TOTAL_STEPS = 23;
 
+// Keyword map: step number → phrases the bot uses when asking THAT question.
+// Used ONLY to detect doc-skip jumps (not for regular message counting).
+const STEP_KEYWORDS = [
+    { step: 1,  kw: ['cómo te llamas', 'tu nombre', 'correo electrónico', 'cuál es tu nombre'] },
+    { step: 2,  kw: ['punto de partida', 'adaptar', 'campaña totalmente nueva', 'opción a', 'opción b'] },
+    { step: 3,  kw: ['documento de referencia', 'brief anterior', 'adjúntalo', 'clip 📎'] },
+    { step: 4,  kw: ['nombre de este proyecto', 'nombre del proyecto', 'nombre de la campaña'] },
+    { step: 5,  kw: ['marca o cliente', 'cuál es la marca', 'nombre del cliente'] },
+    { step: 6,  kw: ['lidera el proyecto', 'contacto principal', 'quién lidera'] },
+    { step: 7,  kw: ['para qué país', 'qué países', 'mercados de latam', 'argentina, brasil'] },
+    { step: 8,  kw: ['objetivo principal', 'elige uno', 'lanzamiento de producto', 'brand awareness'] },
+    { step: 9,  kw: ['contexto de negocio', 'situación motiva', 'dinámica de mercado'] },
+    { step: 10, kw: ['reto en una sola oración', 'desafío central', 'como si fuera un tweet'] },
+    { step: 11, kw: ['métricas de éxito', 'kpis', 'tasa de conversión', 'share of voice'] },
+    { step: 12, kw: ['público objetivo', 'consumidor ideal', 'demografía', 'psicografía'] },
+    { step: 13, kw: ['insight del consumidor', 'verdad humana profunda'] },
+    { step: 14, kw: ['verdad de marca', 'qué tiene esta marca', 'apalancar creativamente'] },
+    { step: 15, kw: ['contexto cultural', 'fechas especiales', 'tendencias locales', 'matices regionales'] },
+    { step: 16, kw: ['mensaje clave', 'territorio emocional', 'sentimiento queremos provocar'] },
+    { step: 17, kw: ['ventajas del ecosistema', 'meli play', 'red logística', 'alianzas como disney'] },
+    { step: 18, kw: ['mecánicas promocionales', 'descuentos', 'cupones', 'cashback'] },
+    { step: 19, kw: ['formatos', 'home slider', 'banners rtb', 'email marketing', 'notificaciones push'] },
+    { step: 20, kw: ['fecha de lanzamiento', '10 días hábiles', 'tiempos'] },
+    { step: 21, kw: ['presupuesto', 'inversión en medios', 'producción de activos', 'desglosarlo'] },
+    { step: 22, kw: ['archivos', 'key visuals', 'manual de marca', 'logos', 'obligatorios'] },
+    { step: 23, kw: ['dato adicional', 'estudios de mercado', 'información adicional'] },
+];
+
+/** Returns the first step number found via keyword scan in a given text. */
+function detectStepInText(text) {
+    const lower = text.toLowerCase();
+    for (const { step, kw } of STEP_KEYWORDS) {
+        if (kw.some(k => lower.includes(k))) return step;
+    }
+    return 0;
+}
+
 function updateBriefProgress() {
-    // Count how many real user answers have been given (exclude doc-upload system prompts)
+    // ① Real user answers (typed messages, not internal doc-upload prompts)
     const userAnswers = conversationHistory.filter(
         m => m.role === 'user' && !m.parts[0].text.startsWith('[DOCUMENTO ADJUNTO:')
     ).length;
 
-    // Check if the brief is complete (bot produced the final summary)
+    // ② Steps covered by uploaded PDFs: for each doc-upload prompt find the
+    //    very next bot reply and detect which step the bot jumped TO.
+    //    Everything BEFORE that step was covered by the document.
+    let docCoveredSteps = 0;
+    for (let i = 0; i < conversationHistory.length; i++) {
+        const msg = conversationHistory[i];
+        if (msg.role === 'user' && msg.parts[0].text.startsWith('[DOCUMENTO ADJUNTO:')) {
+            // Find the next model reply after this doc upload
+            const nextBot = conversationHistory.slice(i + 1).find(m => m.role === 'model');
+            if (nextBot) {
+                const jumpedToStep = detectStepInText(nextBot.parts[0].text);
+                if (jumpedToStep > 1) {
+                    // Steps 1 … (jumpedToStep-1) were covered by the document
+                    docCoveredSteps = Math.max(docCoveredSteps, jumpedToStep - 1);
+                }
+            }
+        }
+    }
+
+    // ③ Check if the brief is fully complete
     const allBotText = conversationHistory
         .filter(m => m.role === 'model')
         .map(m => m.parts[0].text)
         .join(' ')
         .toLowerCase();
-
     const isComplete = allBotText.includes('resumen final para documento') ||
                        allBotText.includes('brief completo');
 
-    const answered = isComplete ? TOTAL_STEPS : Math.min(userAnswers, TOTAL_STEPS);
+    // Take the higher of typed answers vs. doc-covered steps
+    const answered = isComplete ? TOTAL_STEPS
+                                : Math.min(Math.max(userAnswers, docCoveredSteps + userAnswers), TOTAL_STEPS);
     const pct = isComplete ? 100 : Math.round((answered / TOTAL_STEPS) * 100);
 
     const fillEl = document.getElementById('brief-progress-fill');
