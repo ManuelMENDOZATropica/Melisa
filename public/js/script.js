@@ -444,18 +444,14 @@ function showDownloadBubble() {
  */
 function getFinalBriefContent() {
     let finalSummary = "";
-    // Buscar el bloque marcado explícitamente
     for (let i = conversationHistory.length - 1; i >= 0; i--) {
         const text = conversationHistory[i].parts[0].text;
         if (text.includes("--- RESUMEN FINAL PARA DOCUMENTO ---")) {
-            // Extraer solo lo que va después del marcador
             const parts = text.split("--- RESUMEN FINAL PARA DOCUMENTO ---");
             finalSummary = parts[parts.length - 1].trim();
             break;
         }
     }
-
-    // Si no hay marcador, buscar el último mensaje de Melissa
     if (!finalSummary) {
         for (let i = conversationHistory.length - 1; i >= 0; i--) {
             if (conversationHistory[i].role === "model") {
@@ -467,20 +463,16 @@ function getFinalBriefContent() {
     return finalSummary;
 }
 
-// ── Helper: load an image URL as a base64 data-URL ──────────────
-function loadImageAsBase64(url) {
+// ── Helper: load asset as base64 via fetch (no CORS canvas issues) ──
+async function loadAsBase64(url) {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`No se pudo cargar: ${url}`);
+    const blob = await resp.blob();
     return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => {
-            const canvas = document.createElement('canvas');
-            canvas.width  = img.naturalWidth;
-            canvas.height = img.naturalHeight;
-            canvas.getContext('2d').drawImage(img, 0, 0);
-            resolve(canvas.toDataURL('image/jpeg', 0.92));
-        };
-        img.onerror = reject;
-        img.src = url;
+        const reader = new FileReader();
+        reader.onload  = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
     });
 }
 
@@ -490,176 +482,208 @@ async function descargarBrief() {
         const finalSummary = getFinalBriefContent();
         if (!finalSummary) { alert('Aún no hay un brief final para descargar.'); return; }
 
-        // ── Load brand assets ───────────────────────────────────────
+        // ── Cargar assets de marca ───────────────────────────────────
         const [fondoB64, bannerB64] = await Promise.all([
-            loadImageAsBase64('assets/fondo.jpg'),
-            loadImageAsBase64('assets/banner.png'),
+            loadAsBase64('assets/fondo.jpg'),
+            loadAsBase64('assets/banner.png'),
         ]);
 
-        // ── PDF setup ───────────────────────────────────────────────
-        const doc  = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-        const PW   = doc.internal.pageSize.getWidth();   // 210 mm
-        const PH   = doc.internal.pageSize.getHeight();  // 297 mm
+        // ── Configuración del PDF ────────────────────────────────────
+        const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+        const PW  = doc.internal.pageSize.getWidth();   // 210 mm
+        const PH  = doc.internal.pageSize.getHeight();  // 297 mm
 
-        // Brand colours (RGB 0-255)
-        const YELLOW = [255, 230, 0];
-        const BLUE   = [18, 89, 195];
-        const DARK   = [0, 48, 135];
+        // Colores de marca
+        const YELLOW = [255, 230,   0];
+        const BLUE   = [ 18,  89, 195];
+        const DARK   = [  0,  48, 135];
         const WHITE  = [255, 255, 255];
-        const GREY   = [80, 80, 80];
+        const GREY   = [ 65,  65,  65];
 
-        // Layout constants (mm)
-        const BANNER_H   = 28;   // header strip height
-        const FOOTER_H   = 12;   // footer strip height
-        const MARGIN_L   = 18;
-        const MARGIN_R   = 18;
-        const TEXT_W     = PW - MARGIN_L - MARGIN_R;
-        const CONTENT_TOP= BANNER_H + 10;   // y where content starts
-        const CONTENT_BOT= PH - FOOTER_H - 6;
+        // Layout (mm)
+        const BANNER_H   = 30;
+        const FOOTER_H   = 10;
+        const ML         = 18;   // margin left
+        const MR         = 18;   // margin right
+        const TW         = PW - ML - MR;
+        const Y_START    = BANNER_H + 8;
+        const Y_END      = PH - FOOTER_H - 4;
 
-        // ── Draw one page background + header + footer ───────────────
-        function drawPageChrome(pageNum, totalPages) {
-            // Full-page background
+        // ── Chrome (fondo + banner + footer) en cada página ──────────
+        function drawChrome(pgNum) {
+            // 1. Fondo completo
             doc.addImage(fondoB64, 'JPEG', 0, 0, PW, PH);
 
-            // White semi-transparent content area (simulated with white rect + alpha trick)
+            // 2. Panel blanco sobre el área de contenido (sin opacity trick)
             doc.setFillColor(255, 255, 255);
-            doc.setGState(new doc.GState({ opacity: 0.88 }));
             doc.rect(0, BANNER_H, PW, PH - BANNER_H - FOOTER_H, 'F');
-            doc.setGState(new doc.GState({ opacity: 1 }));
 
-            // Banner image (header strip)
+            // 3. Línea amarilla de separación bajo el banner
+            doc.setFillColor(...YELLOW);
+            doc.rect(0, BANNER_H, PW, 1.2, 'F');
+
+            // 4. Banner con logo
             doc.addImage(bannerB64, 'PNG', 0, 0, PW, BANNER_H);
 
-            // Footer bar
+            // 5. Footer azul oscuro
             doc.setFillColor(...DARK);
             doc.rect(0, PH - FOOTER_H, PW, FOOTER_H, 'F');
-
-            // Footer text
             doc.setFont('helvetica', 'normal');
-            doc.setFontSize(7);
+            doc.setFontSize(6.5);
             doc.setTextColor(...WHITE);
-            doc.text('MELISA × Mercado Ads — Documento Estratégico de Campaña', MARGIN_L, PH - 4.5);
-            doc.text(`Página ${pageNum}`, PW - MARGIN_R, PH - 4.5, { align: 'right' });
+            doc.text('MELISA × Mercado Ads — Documento Estratégico de Campaña', ML, PH - 3.8);
+            doc.text(`Página ${pgNum}`, PW - MR, PH - 3.8, { align: 'right' });
         }
 
-        // ── Parse markdown-ish brief into structured lines ───────────
-        function parselines(rawText) {
-            return rawText.split('\n').map(raw => {
-                const stripped = raw
-                    .replace(/^#{1,3}\s*/, '')
-                    .replace(/\*\*/g, '')
-                    .trim();
-                if (!stripped || raw.trim().startsWith('---')) return null;
+        // ── Parser de contenido del brief ────────────────────────────
+        // NO descarta nada útil. Clasifica cada línea por tipo.
+        function parseContent(rawText) {
+            const result = [];
+            for (const raw of rawText.split('\n')) {
+                const t = raw.trim();
 
-                let type = 'body';
-                if (/^#{1,3}\s/.test(raw) || /^\d+[\.\)]\s+[A-Z]/.test(stripped) || /^[A-ZÁÉÍÓÚÑ\s]{6,}$/.test(stripped)) {
-                    type = 'section';
-                } else if (/^[\*\-\•]\s/.test(raw.trim())) {
-                    type = 'bullet';
-                } else if (/^\*{0,2}([\w\s]+):\*{0,2}/.test(stripped) && stripped.length < 80) {
-                    type = 'label';
+                // Saltar solo separadores y marcadores internos
+                if (!t) { result.push({ type: 'spacer' }); continue; }
+                if (t.startsWith('---')) continue;
+
+                let type    = 'body';
+                let content = t.replace(/\*\*/g, '');   // quitar negritas markdown
+
+                // Sección: ### Título  ó  **TÍTULO EN CAPS**  ó  "N. TÍTULO"
+                if (/^#{1,3}\s/.test(raw)) {
+                    type    = 'section';
+                    content = t.replace(/^#+\s*/, '').replace(/\*\*/g, '');
+                } else if (/^\*\*[^*]+\*\*$/.test(t)) {
+                    type    = 'section';
+                    content = t.replace(/\*\*/g, '');
+                } else if (/^\d+[\.\)]\s+[A-ZÁÉÍÓÚÑ]/.test(t)) {
+                    type    = 'section';
+                    content = t.replace(/\*\*/g, '');
                 }
-                return { type, text: stripped.replace(/^[\•\-\*]\s*/, '') };
-            }).filter(Boolean);
+                // Bullet: empieza con - * • ·
+                else if (/^[-*•·]\s/.test(t)) {
+                    type    = 'bullet';
+                    content = t.replace(/^[-*•·]\s+/, '').replace(/\*\*/g, '');
+                }
+                // Label: "Clave: valor" donde la clave es corta
+                else if (/^[^:]{1,40}:\s+\S/.test(t)) {
+                    type    = 'label';
+                    content = t.replace(/\*\*/g, '');
+                }
+
+                result.push({ type, content });
+            }
+            return result;
         }
 
-        // ── Render lines across pages ────────────────────────────────
-        const lines = parselines(finalSummary);
+        // ── Renderizado ──────────────────────────────────────────────
+        const items = parseContent(finalSummary);
         let page = 1;
-        drawPageChrome(page, '?');
-        let y = CONTENT_TOP;
+        drawChrome(page);
+        let y = Y_START;
 
-        for (const line of lines) {
-            const { type, text } = line;
+        const LINE_H_BODY    = 4.6;
+        const LINE_H_SECTION = 5.5;
 
-            // Section header — bold, dark blue, with yellow accent bar
+        for (const item of items) {
+            // Espacio en blanco
+            if (item.type === 'spacer') {
+                y += 1.5;
+                if (y > Y_END) { doc.addPage(); page++; drawChrome(page); y = Y_START; }
+                continue;
+            }
+
+            const { type, content } = item;
+
+            // ── Sección ──────────────────────────────────────────────
             if (type === 'section') {
-                const blockH = 10;
-                if (y + blockH + 4 > CONTENT_BOT) {
-                    doc.addPage(); page++;
-                    drawPageChrome(page, '?');
-                    y = CONTENT_TOP;
+                y += 3; // espacio extra antes de cada sección
+                const wrp   = doc.splitTextToSize(content, TW - 7);
+                const barH  = wrp.length * LINE_H_SECTION + 2;
+                const blockH = barH + 5;
+
+                if (y + blockH > Y_END) {
+                    doc.addPage(); page++; drawChrome(page); y = Y_START;
                 }
-                // Accent left bar
+
+                // Barra amarilla lateral
                 doc.setFillColor(...YELLOW);
-                doc.rect(MARGIN_L, y - 1, 2.5, 7, 'F');
-                // Title text
+                doc.rect(ML, y, 3, barH, 'F');
+
                 doc.setFont('helvetica', 'bold');
                 doc.setFontSize(10.5);
                 doc.setTextColor(...DARK);
-                const titleLines = doc.splitTextToSize(text, TEXT_W - 6);
-                doc.text(titleLines, MARGIN_L + 5, y + 5);
-                y += titleLines.length * 5.5 + 5;
+                doc.text(wrp, ML + 6, y + LINE_H_SECTION);
+
+                y += blockH;
                 continue;
             }
 
-            // Bullet
+            // ── Bullet ───────────────────────────────────────────────
             if (type === 'bullet') {
+                const wrp    = doc.splitTextToSize(content, TW - 8);
+                const blockH = wrp.length * LINE_H_BODY + 2;
+
+                if (y + blockH > Y_END) {
+                    doc.addPage(); page++; drawChrome(page); y = Y_START;
+                }
+
+                doc.setFillColor(...BLUE);
+                doc.circle(ML + 2.5, y + LINE_H_BODY - 0.5, 0.9, 'F');
+
                 doc.setFont('helvetica', 'normal');
                 doc.setFontSize(9);
                 doc.setTextColor(...GREY);
-                const wrapped = doc.splitTextToSize(text, TEXT_W - 8);
-                const blockH  = wrapped.length * 4.8 + 2;
-                if (y + blockH > CONTENT_BOT) {
-                    doc.addPage(); page++;
-                    drawPageChrome(page, '?');
-                    y = CONTENT_TOP;
-                }
-                // Bullet dot
-                doc.setFillColor(...BLUE);
-                doc.circle(MARGIN_L + 2, y + 2.8, 0.9, 'F');
-                doc.text(wrapped, MARGIN_L + 6, y + 4);
+                doc.text(wrp, ML + 7, y + LINE_H_BODY);
+
                 y += blockH;
                 continue;
             }
 
-            // Label (key: value style)
+            // ── Label (Clave: valor) ──────────────────────────────────
             if (type === 'label') {
-                const colonIdx = text.indexOf(':');
-                const key = colonIdx !== -1 ? text.slice(0, colonIdx + 1) : text;
-                const val = colonIdx !== -1 ? text.slice(colonIdx + 1).trim() : '';
-                const wrapped = doc.splitTextToSize(val || key, TEXT_W - 4);
-                const blockH  = wrapped.length * 4.8 + 1.5;
-                if (y + blockH > CONTENT_BOT) {
-                    doc.addPage(); page++;
-                    drawPageChrome(page, '?');
-                    y = CONTENT_TOP;
+                const colon  = content.indexOf(':');
+                const key    = content.slice(0, colon + 1);
+                const val    = content.slice(colon + 1).trim();
+                const valWrp = doc.splitTextToSize(val || ' ', TW - 4);
+                const blockH = valWrp.length * LINE_H_BODY + 2;
+
+                if (y + blockH > Y_END) {
+                    doc.addPage(); page++; drawChrome(page); y = Y_START;
                 }
+
+                // Label key en azul bold
                 doc.setFont('helvetica', 'bold');
                 doc.setFontSize(9);
                 doc.setTextColor(...BLUE);
-                doc.text(key, MARGIN_L, y + 4);
-                if (val) {
-                    const keyW = doc.getTextWidth(key) + 2;
-                    doc.setFont('helvetica', 'normal');
-                    doc.setTextColor(...GREY);
-                    const vLines = doc.splitTextToSize(val, TEXT_W - keyW);
-                    doc.text(vLines, MARGIN_L + keyW, y + 4);
-                }
+                doc.text(key, ML, y + LINE_H_BODY);
+                const kw = doc.getTextWidth(key) + 1.5;
+
+                // Valor en gris regular
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(...GREY);
+                doc.text(valWrp, ML + kw, y + LINE_H_BODY);
+
                 y += blockH;
                 continue;
             }
 
-            // Body text
+            // ── Body (texto regular) ─────────────────────────────────
+            const wrp    = doc.splitTextToSize(content, TW);
+            const blockH = wrp.length * LINE_H_BODY + 1;
+
+            if (y + blockH > Y_END) {
+                doc.addPage(); page++; drawChrome(page); y = Y_START;
+            }
+
             doc.setFont('helvetica', 'normal');
             doc.setFontSize(9);
             doc.setTextColor(...GREY);
-            const wrapped = doc.splitTextToSize(text, TEXT_W);
-            const blockH  = wrapped.length * 4.8 + 1;
-            if (y + blockH > CONTENT_BOT) {
-                doc.addPage(); page++;
-                drawPageChrome(page, '?');
-                y = CONTENT_TOP;
-            }
-            doc.text(wrapped, MARGIN_L, y + 4);
+            doc.text(wrp, ML, y + LINE_H_BODY);
             y += blockH;
         }
 
-        // ── Retroactively update total page count is not needed with jsPDF
-        //    (page numbers are already correct from the page counter)
-
-        doc.save('Brief_MELISA_Premium.pdf');
+        doc.save('Brief_MELISA.pdf');
 
     } catch (e) {
         console.error('Error generando PDF:', e);
