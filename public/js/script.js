@@ -165,15 +165,15 @@ const TOTAL_STEPS = 24; // 23 original + 1 (PASO 18bis: uso de IA)
 // Keyword map: step number → phrases the bot uses when asking THAT question.
 // Used ONLY to detect doc-skip jumps (not for regular message counting).
 const STEP_KEYWORDS = [
-    { step: 1,  kw: ['cómo te llamas', 'tu nombre', 'correo electrónico', 'cuál es tu nombre'] },
-    { step: 2,  kw: ['punto de partida', 'adaptar', 'campaña totalmente nueva', 'opción a', 'opción b'] },
-    { step: 3,  kw: ['documento de referencia', 'brief anterior', 'adjúntalo', 'clip 📎'] },
-    { step: 4,  kw: ['nombre de este proyecto', 'nombre del proyecto', 'nombre de la campaña'] },
-    { step: 5,  kw: ['marca o cliente', 'cuál es la marca', 'nombre del cliente'] },
-    { step: 6,  kw: ['lidera el proyecto', 'contacto principal', 'quién lidera'] },
-    { step: 7,  kw: ['para qué país', 'qué países', 'mercados de latam', 'argentina, brasil'] },
-    { step: 8,  kw: ['objetivo principal', 'elige uno', 'lanzamiento de producto', 'brand awareness'] },
-    { step: 9,  kw: ['contexto de negocio', 'situación motiva', 'dinámica de mercado'] },
+    { step: 1, kw: ['cómo te llamas', 'tu nombre', 'correo electrónico', 'cuál es tu nombre'] },
+    { step: 2, kw: ['punto de partida', 'adaptar', 'campaña totalmente nueva', 'opción a', 'opción b'] },
+    { step: 3, kw: ['documento de referencia', 'brief anterior', 'adjúntalo', 'clip 📎'] },
+    { step: 4, kw: ['nombre de este proyecto', 'nombre del proyecto', 'nombre de la campaña'] },
+    { step: 5, kw: ['marca o cliente', 'cuál es la marca', 'nombre del cliente'] },
+    { step: 6, kw: ['lidera el proyecto', 'contacto principal', 'quién lidera'] },
+    { step: 7, kw: ['para qué país', 'qué países', 'mercados de latam', 'argentina, brasil'] },
+    { step: 8, kw: ['objetivo principal', 'elige uno', 'lanzamiento de producto', 'brand awareness'] },
+    { step: 9, kw: ['contexto de negocio', 'situación motiva', 'dinámica de mercado'] },
     { step: 10, kw: ['reto en una sola oración', 'desafío central', 'como si fuera un tweet'] },
     { step: 11, kw: ['métricas de éxito', 'kpis', 'tasa de conversión', 'share of voice'] },
     { step: 12, kw: ['público objetivo', 'consumidor ideal', 'demografía', 'psicografía'] },
@@ -231,19 +231,19 @@ function updateBriefProgress() {
         .join(' ')
         .toLowerCase();
     const isComplete = allBotText.includes('resumen final para documento') ||
-                       allBotText.includes('brief completo');
+        allBotText.includes('brief completo');
 
     // Take the higher of typed answers vs. doc-covered steps
     const answered = isComplete ? TOTAL_STEPS
-                                : Math.min(Math.max(userAnswers, docCoveredSteps + userAnswers), TOTAL_STEPS);
+        : Math.min(Math.max(userAnswers, docCoveredSteps + userAnswers), TOTAL_STEPS);
     const pct = isComplete ? 100 : Math.round((answered / TOTAL_STEPS) * 100);
 
     const fillEl = document.getElementById('brief-progress-fill');
-    const pctEl  = document.getElementById('brief-progress-pct');
+    const pctEl = document.getElementById('brief-progress-pct');
     if (!fillEl || !pctEl) return;
 
     fillEl.style.width = pct + '%';
-    pctEl.textContent  = pct + '%';
+    pctEl.textContent = pct + '%';
 
     if (isComplete || pct === 100) {
         fillEl.classList.add('complete');
@@ -470,9 +470,33 @@ async function loadAsBase64(url) {
     const blob = await resp.blob();
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload  = () => resolve(reader.result);
+        reader.onload = () => resolve(reader.result);
         reader.onerror = reject;
         reader.readAsDataURL(blob);
+    });
+}
+
+// ── Helper: convierte SVG a PNG base64 para jsPDF ──
+async function loadSvgAsPng(url, targetW = 800, targetH = 200) {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`No se pudo cargar SVG: ${url}`);
+    const svgText = await resp.text();
+    const blob = new Blob([svgText], { type: 'image/svg+xml' });
+    const blobUrl = URL.createObjectURL(blob);
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            const w = img.naturalWidth  || targetW;
+            const h = img.naturalHeight || targetH;
+            const canvas = document.createElement('canvas');
+            canvas.width  = w;
+            canvas.height = h;
+            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+            URL.revokeObjectURL(blobUrl);
+            resolve(canvas.toDataURL('image/png'));
+        };
+        img.onerror = (e) => { URL.revokeObjectURL(blobUrl); reject(e); };
+        img.src = blobUrl;
     });
 }
 
@@ -483,55 +507,54 @@ async function descargarBrief() {
         if (!finalSummary) { alert('Aún no hay un brief final para descargar.'); return; }
 
         // ── Cargar assets de marca ───────────────────────────────────
-        const [fondoB64, bannerB64] = await Promise.all([
+        const [fondoB64, logoB64] = await Promise.all([
             loadAsBase64('assets/fondo.jpg'),
-            loadAsBase64('assets/banner.png'),
+            loadSvgAsPng('assets/logo Mercadolibre.svg', 1200, 300),
         ]);
 
         // ── Configuración del PDF ────────────────────────────────────
         const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-        const PW  = doc.internal.pageSize.getWidth();   // 210 mm
-        const PH  = doc.internal.pageSize.getHeight();  // 297 mm
+        const PW = doc.internal.pageSize.getWidth();   // 210 mm
+        const PH = doc.internal.pageSize.getHeight();  // 297 mm
 
         // Colores de marca
-        const YELLOW = [255, 230,   0];
-        const BLUE   = [ 18,  89, 195];
-        const DARK   = [  0,  48, 135];
-        const WHITE  = [255, 255, 255];
-        const GREY   = [ 65,  65,  65];
+        const YELLOW = [255, 230, 0];
+        const BLUE = [18, 89, 195];
+        const DARK = [0, 48, 135];
+        const WHITE = [255, 255, 255];
+        const GREY = [65, 65, 65];
 
-        // Layout (mm)
-        const BANNER_H   = 30;
-        const FOOTER_H   = 10;
-        const ML         = 18;   // margin left
-        const MR         = 18;   // margin right
-        const TW         = PW - ML - MR;
-        const Y_START    = BANNER_H + 8;
-        const Y_END      = PH - FOOTER_H - 4;
-
-        // ── Chrome (fondo + banner + footer) en cada página ──────────
+        // ── Chrome: cintillo amarillo + logo ML + fondo + footer ──────
+        const FOOTER_H = 10;
+        const ML = 18;
+        const MR = 18;
+        const BANNER_H = 22;
+        const TW = PW - ML - MR;
+        const Y_START = BANNER_H + 8;
+        const Y_END = PH - FOOTER_H - 4;
         function drawChrome(pgNum) {
             // 1. Fondo completo
             doc.addImage(fondoB64, 'JPEG', 0, 0, PW, PH);
-
-            // 2. Panel blanco sobre el área de contenido (sin opacity trick)
+            // 2. Panel blanco para el contenido
             doc.setFillColor(255, 255, 255);
             doc.rect(0, BANNER_H, PW, PH - BANNER_H - FOOTER_H, 'F');
-
-            // 3. Línea amarilla de separación bajo el banner
+            // 3. Cintillo amarillo (igual que el header de la web)
             doc.setFillColor(...YELLOW);
-            doc.rect(0, BANNER_H, PW, 1.2, 'F');
-
-            // 4. Banner con logo
-            doc.addImage(bannerB64, 'PNG', 0, 0, PW, BANNER_H);
-
-            // 5. Footer azul oscuro
+            doc.rect(0, 0, PW, BANNER_H, 'F');
+            // 4. Logo de Mercado Libre centrado en el cintillo
+            const logoH = BANNER_H * 0.72;
+            const logoW = logoH * 4.2;
+            doc.addImage(logoB64, 'PNG', (PW - logoW) / 2, (BANNER_H - logoH) / 2, logoW, logoH);
+            // 5. Línea separadora sutil
+            doc.setFillColor(240, 200, 0);
+            doc.rect(0, BANNER_H, PW, 0.8, 'F');
+            // 6. Footer azul oscuro
             doc.setFillColor(...DARK);
             doc.rect(0, PH - FOOTER_H, PW, FOOTER_H, 'F');
             doc.setFont('helvetica', 'normal');
             doc.setFontSize(6.5);
             doc.setTextColor(...WHITE);
-            doc.text('MELISA × Mercado Ads — Documento Estratégico de Campaña', ML, PH - 3.8);
+            doc.text('MELISA — Documento Estratégico de Campaña', ML, PH - 3.8);
             doc.text(`Página ${pgNum}`, PW - MR, PH - 3.8, { align: 'right' });
         }
 
@@ -546,28 +569,28 @@ async function descargarBrief() {
                 if (!t) { result.push({ type: 'spacer' }); continue; }
                 if (t.startsWith('---')) continue;
 
-                let type    = 'body';
+                let type = 'body';
                 let content = t.replace(/\*\*/g, '');   // quitar negritas markdown
 
                 // Sección: ### Título  ó  **TÍTULO EN CAPS**  ó  "N. TÍTULO"
                 if (/^#{1,3}\s/.test(raw)) {
-                    type    = 'section';
+                    type = 'section';
                     content = t.replace(/^#+\s*/, '').replace(/\*\*/g, '');
                 } else if (/^\*\*[^*]+\*\*$/.test(t)) {
-                    type    = 'section';
+                    type = 'section';
                     content = t.replace(/\*\*/g, '');
                 } else if (/^\d+[\.\)]\s+[A-ZÁÉÍÓÚÑ]/.test(t)) {
-                    type    = 'section';
+                    type = 'section';
                     content = t.replace(/\*\*/g, '');
                 }
                 // Bullet: empieza con - * • ·
                 else if (/^[-*•·]\s/.test(t)) {
-                    type    = 'bullet';
+                    type = 'bullet';
                     content = t.replace(/^[-*•·]\s+/, '').replace(/\*\*/g, '');
                 }
                 // Label: "Clave: valor" donde la clave es corta
                 else if (/^[^:]{1,40}:\s+\S/.test(t)) {
-                    type    = 'label';
+                    type = 'label';
                     content = t.replace(/\*\*/g, '');
                 }
 
@@ -582,7 +605,7 @@ async function descargarBrief() {
         drawChrome(page);
         let y = Y_START;
 
-        const LINE_H_BODY    = 4.6;
+        const LINE_H_BODY = 4.6;
         const LINE_H_SECTION = 5.5;
 
         for (const item of items) {
@@ -598,8 +621,8 @@ async function descargarBrief() {
             // ── Sección ──────────────────────────────────────────────
             if (type === 'section') {
                 y += 3; // espacio extra antes de cada sección
-                const wrp   = doc.splitTextToSize(content, TW - 7);
-                const barH  = wrp.length * LINE_H_SECTION + 2;
+                const wrp = doc.splitTextToSize(content, TW - 7);
+                const barH = wrp.length * LINE_H_SECTION + 2;
                 const blockH = barH + 5;
 
                 if (y + blockH > Y_END) {
@@ -621,7 +644,7 @@ async function descargarBrief() {
 
             // ── Bullet ───────────────────────────────────────────────
             if (type === 'bullet') {
-                const wrp    = doc.splitTextToSize(content, TW - 8);
+                const wrp = doc.splitTextToSize(content, TW - 8);
                 const blockH = wrp.length * LINE_H_BODY + 2;
 
                 if (y + blockH > Y_END) {
@@ -642,9 +665,9 @@ async function descargarBrief() {
 
             // ── Label (Clave: valor) ──────────────────────────────────
             if (type === 'label') {
-                const colon  = content.indexOf(':');
-                const key    = content.slice(0, colon + 1);
-                const val    = content.slice(colon + 1).trim();
+                const colon = content.indexOf(':');
+                const key = content.slice(0, colon + 1);
+                const val = content.slice(colon + 1).trim();
                 const valWrp = doc.splitTextToSize(val || ' ', TW - 4);
                 const blockH = valWrp.length * LINE_H_BODY + 2;
 
@@ -669,7 +692,7 @@ async function descargarBrief() {
             }
 
             // ── Body (texto regular) ─────────────────────────────────
-            const wrp    = doc.splitTextToSize(content, TW);
+            const wrp = doc.splitTextToSize(content, TW);
             const blockH = wrp.length * LINE_H_BODY + 1;
 
             if (y + blockH > Y_END) {
@@ -708,7 +731,7 @@ function descargarBriefSimple() {
 
     let y = 45;
     const margin = 20;
-    const width  = 170;
+    const width = 170;
 
     finalSummary.split('\n').forEach(line => {
         let processed = line.replace(/^\s*[\*\-\•]\s*/, '• ');
@@ -716,7 +739,7 @@ function descargarBriefSimple() {
 
         const isTitle = processed.startsWith('###') || /^\d+[\)\.]/.test(processed) || /^[A-Z\s]{5,}$/.test(processed.trim());
         const cleanText = processed.replace(/###\s*/, '').replace(/\*\*/g, '').trim();
-        const isBullet  = processed.startsWith('•');
+        const isBullet = processed.startsWith('•');
 
         doc.setFont('helvetica', isTitle ? 'bold' : 'normal');
         doc.setFontSize(isTitle ? 11 : 9.5);
@@ -747,15 +770,15 @@ async function debugGenerarPDF() {
         const { jsPDF } = window.jspdf;
 
         // ── 1. Cargar assets con reporte de error visible ─────────────
-        let fondoB64 = null, bannerB64 = null;
+        let fondoB64 = null, logoB64 = null;
         try {
-            [fondoB64, bannerB64] = await Promise.all([
+            [fondoB64, logoB64] = await Promise.all([
                 loadAsBase64('assets/fondo.jpg'),
-                loadAsBase64('assets/banner.png'),
+                loadSvgAsPng('assets/logo Mercadolibre.svg', 1200, 300),
             ]);
         } catch (assetErr) {
             alert('❌ Error cargando assets gráficos:\n' + assetErr.message +
-                  '\n\nVerifica que fondo.jpg y banner.png existan en /assets/');
+                '\n\nVerifica que fondo.jpg y logo Mercadolibre.svg existan en /assets/');
             return;
         }
 
@@ -764,19 +787,19 @@ async function debugGenerarPDF() {
         const PW = doc.internal.pageSize.getWidth();
         const PH = doc.internal.pageSize.getHeight();
 
-        const YELLOW = [255, 230,   0];
-        const BLUE   = [ 18,  89, 195];
-        const DARK   = [  0,  48, 135];
-        const WHITE  = [255, 255, 255];
-        const GREY   = [ 65,  65,  65];
-        const LIGHT  = [180, 180, 180];
+        const YELLOW = [255, 230, 0];
+        const BLUE = [18, 89, 195];
+        const DARK = [0, 48, 135];
+        const WHITE = [255, 255, 255];
+        const GREY = [65, 65, 65];
+        const LIGHT = [180, 180, 180];
 
         const BANNER_H = 30;
         const FOOTER_H = 10;
         const ML = 18, MR = 18;
         const TW = PW - ML - MR;
         const Y_START = BANNER_H + 8;
-        const Y_END   = PH - FOOTER_H - 4;
+        const Y_END = PH - FOOTER_H - 4;
         const LH = 4.6;   // line height body
         const SH = 5.5;   // line height section
 
@@ -796,7 +819,7 @@ async function debugGenerarPDF() {
             doc.setFont('helvetica', 'normal');
             doc.setFontSize(6.5);
             doc.setTextColor(...WHITE);
-            doc.text('MELISA × Mercado Ads — Documento Estratégico de Campaña', ML, PH - 3.8);
+            doc.text('MELISA — Documento Estratégico de Campaña', ML, PH - 3.8);
             doc.text(`Página ${n}`, PW - MR, PH - 3.8, { align: 'right' });
         }
         chrome(page);
@@ -811,7 +834,7 @@ async function debugGenerarPDF() {
             ensure(16);
             y += 4;
             const lines = doc.splitTextToSize(title, TW - 7);
-            const barH  = lines.length * SH + 2;
+            const barH = lines.length * SH + 2;
             doc.setFillColor(...YELLOW);
             doc.rect(ML, y, 3, barH, 'F');
             doc.setFont('helvetica', 'bold');
@@ -871,8 +894,8 @@ async function debugGenerarPDF() {
         const finalContent = getFinalBriefContent();
         const hasFinal = finalContent &&
             (finalContent.includes('INFORMACIÓN GENERAL') ||
-             finalContent.includes('OBJETIVO') ||
-             finalContent.toLowerCase().includes('resumen final'));
+                finalContent.includes('OBJETIVO') ||
+                finalContent.toLowerCase().includes('resumen final'));
 
         // ── 6. Renderizar ────────────────────────────────────────────
         if (hasFinal) {
@@ -892,32 +915,58 @@ async function debugGenerarPDF() {
         } else {
             // ── Modo B: Brief parcial — template con lo recolectado ──
             const SECTIONS = [
-                { title: '0. INFORMACIÓN GENERAL DEL PROYECTO',
-                  hints: ['nombre', 'marca', 'cliente', 'líder', 'lider', 'mercado', 'país'] },
-                { title: '1. OBJETIVO DE CAMPAÑA',
-                  hints: ['objetivo', 'lanzamiento', 'brand awareness', 'performance', 'estacional'] },
-                { title: '2. THE CHALLENGE',
-                  hints: ['desafío', 'desafio', 'reto', 'contexto de negocio', 'mercado', 'tweet'] },
-                { title: '3. MÉTRICAS DE ÉXITO (KPIs)',
-                  hints: ['métrica', 'kpi', 'conversión', 'share of voice', 'recordación'] },
-                { title: '4. STRATEGIC FOUNDATION',
-                  hints: ['público objetivo', 'consumidor', 'insight', 'verdad de marca', 'cultural'] },
-                { title: '5. MENSAJE CLAVE Y TERRITORIO EMOCIONAL',
-                  hints: ['mensaje clave', 'territorio emocional', 'sentimiento', 'orgullo', 'alegría'] },
-                { title: '6. CREATIVE STRATEGY',
-                  hints: ['estrategia creativa', 'idea', 'concepto creativo'] },
-                { title: '7. CAMPAIGN ARCHITECTURE',
-                  hints: ['arquitectura', 'fases', 'despliegue'] },
-                { title: '8. MELI ECOSYSTEM INTEGRATION',
-                  hints: ['ecosistema', 'meli play', 'alianzas', 'mecánica', 'descuento', 'cashback'] },
-                { title: '9. MEDIA ECOSYSTEM',
-                  hints: ['formatos', 'home slider', 'banners rtb', 'notificaciones push', 'ooh'] },
-                { title: '10. PRODUCTION CONSIDERATIONS',
-                  hints: ['fecha de lanzamiento', 'presupuesto'] },
-                { title: '11. USO DE INTELIGENCIA ARTIFICIAL',
-                  hints: ['inteligencia artificial', 'ia para', 'generar contenido', 'uso de ia'] },
-                { title: '12. APPENDIX — ARCHIVOS Y DATOS',
-                  hints: ['drive', 'onedrive', 'dropbox', 'archivos', 'key visual', 'dato adicional'] },
+                {
+                    title: '0. INFORMACIÓN GENERAL DEL PROYECTO',
+                    hints: ['nombre', 'marca', 'cliente', 'líder', 'lider', 'mercado', 'país']
+                },
+                {
+                    title: '1. OBJETIVO DE CAMPAÑA',
+                    hints: ['objetivo', 'lanzamiento', 'brand awareness', 'performance', 'estacional']
+                },
+                {
+                    title: '2. THE CHALLENGE',
+                    hints: ['desafío', 'desafio', 'reto', 'contexto de negocio', 'mercado', 'tweet']
+                },
+                {
+                    title: '3. MÉTRICAS DE ÉXITO (KPIs)',
+                    hints: ['métrica', 'kpi', 'conversión', 'share of voice', 'recordación']
+                },
+                {
+                    title: '4. STRATEGIC FOUNDATION',
+                    hints: ['público objetivo', 'consumidor', 'insight', 'verdad de marca', 'cultural']
+                },
+                {
+                    title: '5. MENSAJE CLAVE Y TERRITORIO EMOCIONAL',
+                    hints: ['mensaje clave', 'territorio emocional', 'sentimiento', 'orgullo', 'alegría']
+                },
+                {
+                    title: '6. CREATIVE STRATEGY',
+                    hints: ['estrategia creativa', 'idea', 'concepto creativo']
+                },
+                {
+                    title: '7. CAMPAIGN ARCHITECTURE',
+                    hints: ['arquitectura', 'fases', 'despliegue']
+                },
+                {
+                    title: '8. MELI ECOSYSTEM INTEGRATION',
+                    hints: ['ecosistema', 'meli play', 'alianzas', 'mecánica', 'descuento', 'cashback']
+                },
+                {
+                    title: '9. MEDIA ECOSYSTEM',
+                    hints: ['formatos', 'home slider', 'banners rtb', 'notificaciones push', 'ooh']
+                },
+                {
+                    title: '10. PRODUCTION CONSIDERATIONS',
+                    hints: ['fecha de lanzamiento', 'presupuesto']
+                },
+                {
+                    title: '11. USO DE INTELIGENCIA ARTIFICIAL',
+                    hints: ['inteligencia artificial', 'ia para', 'generar contenido', 'uso de ia']
+                },
+                {
+                    title: '12. APPENDIX — ARCHIVOS Y DATOS',
+                    hints: ['drive', 'onedrive', 'dropbox', 'archivos', 'key visual', 'dato adicional']
+                },
             ];
 
             const botLines = allBot.split('\n').map(l => l.trim()).filter(Boolean);
@@ -939,16 +988,6 @@ async function debugGenerarPDF() {
                 } else {
                     addEmpty();
                 }
-            }
-
-            // Anexo: conversación completa para debug
-            addSection('── DATOS RECOPILADOS (mensajes del chat) ──');
-            for (const msg of conversationHistory) {
-                const text = msg.parts[0].text;
-                if (text.startsWith('[DOCUMENTO ADJUNTO:')) continue;
-                const label = msg.role === 'model' ? '🤖 ' : '👤 ';
-                addBody(label + text.slice(0, 300) + (text.length > 300 ? '…' : ''));
-                y += 1;
             }
         }
 
