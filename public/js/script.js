@@ -507,9 +507,8 @@ async function descargarBrief() {
         if (!finalSummary) { alert('Aún no hay un brief final para descargar.'); return; }
 
         // ── Cargar assets de marca ───────────────────────────────────
-        const [fondoB64, logoB64] = await Promise.all([
+        const [fondoB64] = await Promise.all([
             loadAsBase64('assets/fondo.jpg'),
-            loadSvgAsPng('assets/logo Mercadolibre.svg', 1200, 300),
         ]);
 
         // ── Configuración del PDF ────────────────────────────────────
@@ -538,13 +537,9 @@ async function descargarBrief() {
             // 2. Panel blanco para el contenido
             doc.setFillColor(255, 255, 255);
             doc.rect(0, BANNER_H, PW, PH - BANNER_H - FOOTER_H, 'F');
-            // 3. Cintillo amarillo (igual que el header de la web)
+            // 4. Cintillo amarillo puro (sin logo)
             doc.setFillColor(...YELLOW);
             doc.rect(0, 0, PW, BANNER_H, 'F');
-            // 4. Logo de Mercado Libre centrado en el cintillo
-            const logoH = BANNER_H * 0.72;
-            const logoW = logoH * 4.2;
-            doc.addImage(logoB64, 'PNG', (PW - logoW) / 2, (BANNER_H - logoH) / 2, logoW, logoH);
             // 5. Línea separadora sutil
             doc.setFillColor(240, 200, 0);
             doc.rect(0, BANNER_H, PW, 0.8, 'F');
@@ -770,15 +765,11 @@ async function debugGenerarPDF() {
         const { jsPDF } = window.jspdf;
 
         // ── 1. Cargar assets con reporte de error visible ─────────────
-        let fondoB64 = null, logoB64 = null;
+        let fondoB64 = null;
         try {
-            [fondoB64, logoB64] = await Promise.all([
-                loadAsBase64('assets/fondo.jpg'),
-                loadSvgAsPng('assets/logo Mercadolibre.svg', 1200, 300),
-            ]);
+            fondoB64 = await loadAsBase64('assets/fondo.jpg');
         } catch (assetErr) {
-            alert('❌ Error cargando assets gráficos:\n' + assetErr.message +
-                '\n\nVerifica que fondo.jpg y logo Mercadolibre.svg existan en /assets/');
+            alert('❌ Error cargando fondo.jpg:\n' + assetErr.message);
             return;
         }
 
@@ -811,13 +802,9 @@ async function debugGenerarPDF() {
             doc.addImage(fondoB64, 'JPEG', 0, 0, PW, PH);
             doc.setFillColor(255, 255, 255);
             doc.rect(0, BANNER_H, PW, PH - BANNER_H - FOOTER_H, 'F');
-            // Cintillo amarillo
+            // Cintillo amarillo puro
             doc.setFillColor(...YELLOW);
             doc.rect(0, 0, PW, BANNER_H, 'F');
-            // Logo ML centrado
-            const lh = BANNER_H * 0.72;
-            const lw = lh * 4.2;
-            doc.addImage(logoB64, 'PNG', (PW - lw) / 2, (BANNER_H - lh) / 2, lw, lh);
             // Línea separadora
             doc.setFillColor(240, 200, 0);
             doc.rect(0, BANNER_H, PW, 0.8, 'F');
