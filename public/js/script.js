@@ -463,89 +463,202 @@ function getFinalBriefContent() {
     return finalSummary;
 }
 
+// ── Helper: load an image URL as a base64 data-URL ──────────────
+function loadImageAsBase64(url) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width  = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            canvas.getContext('2d').drawImage(img, 0, 0);
+            resolve(canvas.toDataURL('image/jpeg', 0.92));
+        };
+        img.onerror = reject;
+        img.src = url;
+    });
+}
+
 async function descargarBrief() {
     try {
-        const { PDFDocument, rgb, StandardFonts } = PDFLib;
-
-        const templateUrl = 'assets/Brief template.pdf';
-        const response = await fetch(templateUrl);
-        if (!response.ok) throw new Error("No se pudo cargar la plantilla PDF.");
-        const templateBytes = await response.arrayBuffer();
-
-        const pdfDoc = await PDFDocument.load(templateBytes);
-        const pages = pdfDoc.getPages();
-        const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-        const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-
+        const { jsPDF } = window.jspdf;
         const finalSummary = getFinalBriefContent();
+        if (!finalSummary) { alert('Aún no hay un brief final para descargar.'); return; }
 
-        if (!finalSummary) {
-            alert("Aún no hay un brief final para descargar.");
-            return;
+        // ── Load brand assets ───────────────────────────────────────
+        const [fondoB64, bannerB64] = await Promise.all([
+            loadImageAsBase64('assets/fondo.jpg'),
+            loadImageAsBase64('assets/banner.png'),
+        ]);
+
+        // ── PDF setup ───────────────────────────────────────────────
+        const doc  = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+        const PW   = doc.internal.pageSize.getWidth();   // 210 mm
+        const PH   = doc.internal.pageSize.getHeight();  // 297 mm
+
+        // Brand colours (RGB 0-255)
+        const YELLOW = [255, 230, 0];
+        const BLUE   = [18, 89, 195];
+        const DARK   = [0, 48, 135];
+        const WHITE  = [255, 255, 255];
+        const GREY   = [80, 80, 80];
+
+        // Layout constants (mm)
+        const BANNER_H   = 28;   // header strip height
+        const FOOTER_H   = 12;   // footer strip height
+        const MARGIN_L   = 18;
+        const MARGIN_R   = 18;
+        const TEXT_W     = PW - MARGIN_L - MARGIN_R;
+        const CONTENT_TOP= BANNER_H + 10;   // y where content starts
+        const CONTENT_BOT= PH - FOOTER_H - 6;
+
+        // ── Draw one page background + header + footer ───────────────
+        function drawPageChrome(pageNum, totalPages) {
+            // Full-page background
+            doc.addImage(fondoB64, 'JPEG', 0, 0, PW, PH);
+
+            // White semi-transparent content area (simulated with white rect + alpha trick)
+            doc.setFillColor(255, 255, 255);
+            doc.setGState(new doc.GState({ opacity: 0.88 }));
+            doc.rect(0, BANNER_H, PW, PH - BANNER_H - FOOTER_H, 'F');
+            doc.setGState(new doc.GState({ opacity: 1 }));
+
+            // Banner image (header strip)
+            doc.addImage(bannerB64, 'PNG', 0, 0, PW, BANNER_H);
+
+            // Footer bar
+            doc.setFillColor(...DARK);
+            doc.rect(0, PH - FOOTER_H, PW, FOOTER_H, 'F');
+
+            // Footer text
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(7);
+            doc.setTextColor(...WHITE);
+            doc.text('MELISA × Mercado Ads — Documento Estratégico de Campaña', MARGIN_L, PH - 4.5);
+            doc.text(`Página ${pageNum}`, PW - MARGIN_R, PH - 4.5, { align: 'right' });
         }
 
-        const sections = finalSummary.split("\n");
-        let currentPage = pages[0];
-        let y = currentPage.getHeight() - 100;
-        const margin = 50;
-        const fontSize = 9;
-        const lineHeight = 12;
+        // ── Parse markdown-ish brief into structured lines ───────────
+        function parselines(rawText) {
+            return rawText.split('\n').map(raw => {
+                const stripped = raw
+                    .replace(/^#{1,3}\s*/, '')
+                    .replace(/\*\*/g, '')
+                    .trim();
+                if (!stripped || raw.trim().startsWith('---')) return null;
 
-        for (let line of sections) {
-            line = line.replace(/^\s*[\*\-\•]\s*/, "• "); // Normalizar viñetas
-            const isMarkdownTitle = line.startsWith("###");
-            const cleanLine = line.replace(/###\s*/, "").replace(/\*\*/g, "").trim();
+                let type = 'body';
+                if (/^#{1,3}\s/.test(raw) || /^\d+[\.\)]\s+[A-Z]/.test(stripped) || /^[A-ZÁÉÍÓÚÑ\s]{6,}$/.test(stripped)) {
+                    type = 'section';
+                } else if (/^[\*\-\•]\s/.test(raw.trim())) {
+                    type = 'bullet';
+                } else if (/^\*{0,2}([\w\s]+):\*{0,2}/.test(stripped) && stripped.length < 80) {
+                    type = 'label';
+                }
+                return { type, text: stripped.replace(/^[\•\-\*]\s*/, '') };
+            }).filter(Boolean);
+        }
 
-            if (cleanLine === "" || line.startsWith("---")) {
-                y -= 5;
+        // ── Render lines across pages ────────────────────────────────
+        const lines = parselines(finalSummary);
+        let page = 1;
+        drawPageChrome(page, '?');
+        let y = CONTENT_TOP;
+
+        for (const line of lines) {
+            const { type, text } = line;
+
+            // Section header — bold, dark blue, with yellow accent bar
+            if (type === 'section') {
+                const blockH = 10;
+                if (y + blockH + 4 > CONTENT_BOT) {
+                    doc.addPage(); page++;
+                    drawPageChrome(page, '?');
+                    y = CONTENT_TOP;
+                }
+                // Accent left bar
+                doc.setFillColor(...YELLOW);
+                doc.rect(MARGIN_L, y - 1, 2.5, 7, 'F');
+                // Title text
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(10.5);
+                doc.setTextColor(...DARK);
+                const titleLines = doc.splitTextToSize(text, TEXT_W - 6);
+                doc.text(titleLines, MARGIN_L + 5, y + 5);
+                y += titleLines.length * 5.5 + 5;
                 continue;
             }
 
-            const isTitle = isMarkdownTitle || cleanLine.match(/^\d+[\)\.]/) || cleanLine.match(/^[A-Z\s]{5,}$/);
-            const isBullet = line.startsWith("•");
-
-            const currentFont = isTitle ? boldFont : font;
-            const currentSize = isTitle ? fontSize + 2 : fontSize;
-            const xPos = isBullet ? margin + 10 : margin;
-
-            const words = cleanLine.split(" ");
-            let currentLineText = "";
-            for (const word of words) {
-                const testLine = currentLineText + word + " ";
-                const width = currentFont.widthOfTextAtSize(testLine, currentSize);
-
-                if (width > currentPage.getWidth() - (margin * 2) - (isBullet ? 10 : 0)) {
-                    currentPage.drawText(currentLineText, { x: xPos, y: y, size: currentSize, font: currentFont });
-                    y -= lineHeight;
-                    currentLineText = word + " ";
-                } else {
-                    currentLineText = testLine;
+            // Bullet
+            if (type === 'bullet') {
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(9);
+                doc.setTextColor(...GREY);
+                const wrapped = doc.splitTextToSize(text, TEXT_W - 8);
+                const blockH  = wrapped.length * 4.8 + 2;
+                if (y + blockH > CONTENT_BOT) {
+                    doc.addPage(); page++;
+                    drawPageChrome(page, '?');
+                    y = CONTENT_TOP;
                 }
+                // Bullet dot
+                doc.setFillColor(...BLUE);
+                doc.circle(MARGIN_L + 2, y + 2.8, 0.9, 'F');
+                doc.text(wrapped, MARGIN_L + 6, y + 4);
+                y += blockH;
+                continue;
             }
-            currentPage.drawText(currentLineText, { x: xPos, y: y, size: currentSize, font: currentFont });
-            y -= lineHeight + (isTitle ? 4 : 2);
 
-            if (y < 60) {
-                const pageIndex = pages.indexOf(currentPage);
-                if (pageIndex < pages.length - 1) {
-                    currentPage = pages[pageIndex + 1];
-                    y = currentPage.getHeight() - 60;
-                } else {
-                    currentPage = pdfDoc.addPage();
-                    y = currentPage.getHeight() - 60;
+            // Label (key: value style)
+            if (type === 'label') {
+                const colonIdx = text.indexOf(':');
+                const key = colonIdx !== -1 ? text.slice(0, colonIdx + 1) : text;
+                const val = colonIdx !== -1 ? text.slice(colonIdx + 1).trim() : '';
+                const wrapped = doc.splitTextToSize(val || key, TEXT_W - 4);
+                const blockH  = wrapped.length * 4.8 + 1.5;
+                if (y + blockH > CONTENT_BOT) {
+                    doc.addPage(); page++;
+                    drawPageChrome(page, '?');
+                    y = CONTENT_TOP;
                 }
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(9);
+                doc.setTextColor(...BLUE);
+                doc.text(key, MARGIN_L, y + 4);
+                if (val) {
+                    const keyW = doc.getTextWidth(key) + 2;
+                    doc.setFont('helvetica', 'normal');
+                    doc.setTextColor(...GREY);
+                    const vLines = doc.splitTextToSize(val, TEXT_W - keyW);
+                    doc.text(vLines, MARGIN_L + keyW, y + 4);
+                }
+                y += blockH;
+                continue;
             }
+
+            // Body text
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.setTextColor(...GREY);
+            const wrapped = doc.splitTextToSize(text, TEXT_W);
+            const blockH  = wrapped.length * 4.8 + 1;
+            if (y + blockH > CONTENT_BOT) {
+                doc.addPage(); page++;
+                drawPageChrome(page, '?');
+                y = CONTENT_TOP;
+            }
+            doc.text(wrapped, MARGIN_L, y + 4);
+            y += blockH;
         }
 
-        const pdfBytes = await pdfDoc.save();
-        const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = "Brief_Trópica_Premium.pdf";
-        link.click();
+        // ── Retroactively update total page count is not needed with jsPDF
+        //    (page numbers are already correct from the page counter)
+
+        doc.save('Brief_MELISA_Premium.pdf');
 
     } catch (e) {
-        console.error("Error PDF:", e);
+        console.error('Error generando PDF:', e);
         descargarBriefSimple();
     }
 }
@@ -555,45 +668,41 @@ function descargarBriefSimple() {
     const doc = new jsPDF();
     const finalSummary = getFinalBriefContent();
 
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(20);
-    doc.setTextColor(243, 156, 18);
-    doc.text("TRÓPICA - ESTRATEGIA CREATIVA", 20, 20);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.setTextColor(0, 48, 135);
+    doc.text('MELISA — Estrategia Creativa', 20, 20);
 
-    doc.setFontSize(14);
-    doc.text("Documento Estratégico de Campaña", 20, 30);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(11);
+    doc.setTextColor(80, 80, 80);
+    doc.text('Documento Estratégico de Campaña', 20, 30);
 
     let y = 45;
-    const width = 170;
     const margin = 20;
+    const width  = 170;
 
-    const sections = finalSummary.split("\n");
+    finalSummary.split('\n').forEach(line => {
+        let processed = line.replace(/^\s*[\*\-\•]\s*/, '• ');
+        if (processed.trim() === '' || processed.startsWith('---')) return;
 
-    sections.forEach((line) => {
-        let processedLine = line.replace(/^\s*[\*\-\•]\s*/, "• ");
-        if (processedLine.trim() === "" || processedLine.startsWith("---")) return;
+        const isTitle = processed.startsWith('###') || /^\d+[\)\.]/.test(processed) || /^[A-Z\s]{5,}$/.test(processed.trim());
+        const cleanText = processed.replace(/###\s*/, '').replace(/\*\*/g, '').trim();
+        const isBullet  = processed.startsWith('•');
 
-        const isTitle = processedLine.startsWith("###") || processedLine.match(/^\d+[\)\.]/) || processedLine.match(/^[A-Z\s]{5,}$/);
-        const cleanText = processedLine.replace(/###\s*/, "").replace(/\*\*/g, "").trim();
-        const isBullet = processedLine.startsWith("•");
+        doc.setFont('helvetica', isTitle ? 'bold' : 'normal');
+        doc.setFontSize(isTitle ? 11 : 9.5);
+        doc.setTextColor(isTitle ? 0 : 60);
 
-        doc.setFont("helvetica", isTitle ? "bold" : "normal");
-        doc.setFontSize(isTitle ? 11 : 10);
-        doc.setTextColor(isTitle ? 0 : 50);
-
-        const xPos = isBullet ? margin + 5 : margin;
-        const splitText = doc.splitTextToSize(cleanText, width - (isBullet ? 5 : 0));
-
-        if (y + (splitText.length * 6) > 280) {
-            doc.addPage();
-            y = 20;
-        }
-
-        doc.text(splitText, xPos, y);
-        y += (splitText.length * 5) + (isTitle ? 3 : 1);
+        const xPos = isBullet ? margin + 4 : margin;
+        const split = doc.splitTextToSize(cleanText, width - (isBullet ? 4 : 0));
+        if (y + split.length * 5.5 > 280) { doc.addPage(); y = 20; }
+        doc.text(split, xPos, y);
+        y += split.length * 5 + (isTitle ? 3 : 1.5);
     });
 
-    doc.save("Brief_Trópica_Simple.pdf");
+    doc.save('Brief_MELISA_Simple.pdf');
 }
+
 
 
