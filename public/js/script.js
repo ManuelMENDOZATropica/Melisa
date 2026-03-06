@@ -806,14 +806,22 @@ async function debugGenerarPDF() {
         let page = 1;
         let y = Y_START;
 
-        // ── 3. Chrome (fondo + banner + footer) ─────────────────────
+        // ── 3. Chrome: cintillo amarillo + logo ML + footer ─────────
         function chrome(n) {
             doc.addImage(fondoB64, 'JPEG', 0, 0, PW, PH);
             doc.setFillColor(255, 255, 255);
             doc.rect(0, BANNER_H, PW, PH - BANNER_H - FOOTER_H, 'F');
+            // Cintillo amarillo
             doc.setFillColor(...YELLOW);
-            doc.rect(0, BANNER_H, PW, 1.2, 'F');
-            doc.addImage(bannerB64, 'PNG', 0, 0, PW, BANNER_H);
+            doc.rect(0, 0, PW, BANNER_H, 'F');
+            // Logo ML centrado
+            const lh = BANNER_H * 0.72;
+            const lw = lh * 4.2;
+            doc.addImage(logoB64, 'PNG', (PW - lw) / 2, (BANNER_H - lh) / 2, lw, lh);
+            // Línea separadora
+            doc.setFillColor(240, 200, 0);
+            doc.rect(0, BANNER_H, PW, 0.8, 'F');
+            // Footer
             doc.setFillColor(...DARK);
             doc.rect(0, PH - FOOTER_H, PW, FOOTER_H, 'F');
             doc.setFont('helvetica', 'normal');
