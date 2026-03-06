@@ -734,3 +734,229 @@ function descargarBriefSimple() {
 
 
 
+
+// ══════════════════════════════════════════════════════════════════
+// 🐞  DEBUG PDF — genera el brief completo en cualquier momento
+//     con las secciones llenas o vacías según el avance.
+// ══════════════════════════════════════════════════════════════════
+async function debugGenerarPDF() {
+    const btn = document.getElementById('debugPdfBtn');
+    if (btn) { btn.textContent = '⏳...'; btn.disabled = true; }
+
+    try {
+        const { jsPDF } = window.jspdf;
+
+        // ── 1. Cargar assets con reporte de error visible ─────────────
+        let fondoB64 = null, bannerB64 = null;
+        try {
+            [fondoB64, bannerB64] = await Promise.all([
+                loadAsBase64('assets/fondo.jpg'),
+                loadAsBase64('assets/banner.png'),
+            ]);
+        } catch (assetErr) {
+            alert('❌ Error cargando assets gráficos:\n' + assetErr.message +
+                  '\n\nVerifica que fondo.jpg y banner.png existan en /assets/');
+            return;
+        }
+
+        // ── 2. Configuración del PDF ──────────────────────────────────
+        const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+        const PW = doc.internal.pageSize.getWidth();
+        const PH = doc.internal.pageSize.getHeight();
+
+        const YELLOW = [255, 230,   0];
+        const BLUE   = [ 18,  89, 195];
+        const DARK   = [  0,  48, 135];
+        const WHITE  = [255, 255, 255];
+        const GREY   = [ 65,  65,  65];
+        const LIGHT  = [180, 180, 180];
+
+        const BANNER_H = 30;
+        const FOOTER_H = 10;
+        const ML = 18, MR = 18;
+        const TW = PW - ML - MR;
+        const Y_START = BANNER_H + 8;
+        const Y_END   = PH - FOOTER_H - 4;
+        const LH = 4.6;   // line height body
+        const SH = 5.5;   // line height section
+
+        let page = 1;
+        let y = Y_START;
+
+        // ── 3. Chrome (fondo + banner + footer) ─────────────────────
+        function chrome(n) {
+            doc.addImage(fondoB64, 'JPEG', 0, 0, PW, PH);
+            doc.setFillColor(255, 255, 255);
+            doc.rect(0, BANNER_H, PW, PH - BANNER_H - FOOTER_H, 'F');
+            doc.setFillColor(...YELLOW);
+            doc.rect(0, BANNER_H, PW, 1.2, 'F');
+            doc.addImage(bannerB64, 'PNG', 0, 0, PW, BANNER_H);
+            doc.setFillColor(...DARK);
+            doc.rect(0, PH - FOOTER_H, PW, FOOTER_H, 'F');
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(6.5);
+            doc.setTextColor(...WHITE);
+            doc.text('MELISA × Mercado Ads — Documento Estratégico de Campaña', ML, PH - 3.8);
+            doc.text(`Página ${n}`, PW - MR, PH - 3.8, { align: 'right' });
+        }
+        chrome(page);
+
+        function newPage() {
+            doc.addPage(); page++; chrome(page); y = Y_START;
+        }
+        function ensure(h) { if (y + h > Y_END) newPage(); }
+
+        // ── 4. Helpers de renderizado ────────────────────────────────
+        function addSection(title) {
+            ensure(16);
+            y += 4;
+            const lines = doc.splitTextToSize(title, TW - 7);
+            const barH  = lines.length * SH + 2;
+            doc.setFillColor(...YELLOW);
+            doc.rect(ML, y, 3, barH, 'F');
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(10.5);
+            doc.setTextColor(...DARK);
+            doc.text(lines, ML + 6, y + SH);
+            y += barH + 6;
+        }
+
+        function addBody(text) {
+            if (!text || !text.trim()) return;
+            const clean = text.replace(/\*\*/g, '').trim();
+            const lines = doc.splitTextToSize(clean, TW);
+            ensure(lines.length * LH + 2);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.setTextColor(...GREY);
+            doc.text(lines, ML, y + LH);
+            y += lines.length * LH + 1.5;
+        }
+
+        function addBullet(text) {
+            if (!text || !text.trim()) return;
+            const clean = text.replace(/^[-*•]\s*/, '').replace(/\*\*/g, '').trim();
+            const lines = doc.splitTextToSize(clean, TW - 8);
+            ensure(lines.length * LH + 2);
+            doc.setFillColor(...BLUE);
+            doc.circle(ML + 2.5, y + LH - 0.5, 0.9, 'F');
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.setTextColor(...GREY);
+            doc.text(lines, ML + 7, y + LH);
+            y += lines.length * LH + 1.5;
+        }
+
+        function addEmpty() {
+            ensure(10);
+            doc.setDrawColor(...LIGHT);
+            doc.setLineDashPattern([1.5, 1.5], 0);
+            doc.line(ML, y + 4, PW - MR, y + 4);
+            doc.setLineDashPattern([], 0);
+            doc.setFont('helvetica', 'italic');
+            doc.setFontSize(8);
+            doc.setTextColor(...LIGHT);
+            doc.text('(pendiente)', ML, y + 8.5);
+            y += 13;
+        }
+
+        // ── 5. Extraer contenido de la conversación ─────────────────
+        // Concatena todos los mensajes del modelo para búsqueda
+        const allBot = conversationHistory
+            .filter(m => m.role === 'model')
+            .map(m => m.parts[0].text)
+            .join('\n\n');
+
+        // Intenta obtener el resumen final estructurado
+        const finalContent = getFinalBriefContent();
+        const hasFinal = finalContent &&
+            (finalContent.includes('INFORMACIÓN GENERAL') ||
+             finalContent.includes('OBJETIVO') ||
+             finalContent.toLowerCase().includes('resumen final'));
+
+        // ── 6. Renderizar ────────────────────────────────────────────
+        if (hasFinal) {
+            // ── Modo A: Brief completo — parsear y rendir cada línea ──
+            addSection('📋 BRIEF ESTRATÉGICO COMPLETO');
+            for (const raw of finalContent.split('\n')) {
+                const t = raw.trim();
+                if (!t || t.startsWith('---')) continue;
+                if (/^#{1,3}\s|^\*\*[^*]+\*\*$|^\d+[\.\)]\s+[A-ZÁÉÍ]/.test(raw)) {
+                    addSection(t.replace(/^#+\s*|\*\*/g, ''));
+                } else if (/^[-*•·]\s/.test(t)) {
+                    addBullet(t);
+                } else {
+                    addBody(t);
+                }
+            }
+        } else {
+            // ── Modo B: Brief parcial — template con lo recolectado ──
+            const SECTIONS = [
+                { title: '0. INFORMACIÓN GENERAL DEL PROYECTO',
+                  hints: ['nombre', 'marca', 'cliente', 'líder', 'lider', 'mercado', 'país'] },
+                { title: '1. OBJETIVO DE CAMPAÑA',
+                  hints: ['objetivo', 'lanzamiento', 'brand awareness', 'performance', 'estacional'] },
+                { title: '2. THE CHALLENGE',
+                  hints: ['desafío', 'desafio', 'reto', 'contexto de negocio', 'mercado', 'tweet'] },
+                { title: '3. MÉTRICAS DE ÉXITO (KPIs)',
+                  hints: ['métrica', 'kpi', 'conversión', 'share of voice', 'recordación'] },
+                { title: '4. STRATEGIC FOUNDATION',
+                  hints: ['público objetivo', 'consumidor', 'insight', 'verdad de marca', 'cultural'] },
+                { title: '5. MENSAJE CLAVE Y TERRITORIO EMOCIONAL',
+                  hints: ['mensaje clave', 'territorio emocional', 'sentimiento', 'orgullo', 'alegría'] },
+                { title: '6. CREATIVE STRATEGY',
+                  hints: ['estrategia creativa', 'idea', 'concepto creativo'] },
+                { title: '7. CAMPAIGN ARCHITECTURE',
+                  hints: ['arquitectura', 'fases', 'despliegue'] },
+                { title: '8. MELI ECOSYSTEM INTEGRATION',
+                  hints: ['ecosistema', 'meli play', 'alianzas', 'mecánica', 'descuento', 'cashback'] },
+                { title: '9. MEDIA ECOSYSTEM',
+                  hints: ['formatos', 'home slider', 'banners rtb', 'notificaciones push', 'ooh'] },
+                { title: '10. PRODUCTION CONSIDERATIONS',
+                  hints: ['fecha de lanzamiento', 'presupuesto'] },
+                { title: '11. USO DE INTELIGENCIA ARTIFICIAL',
+                  hints: ['inteligencia artificial', 'ia para', 'generar contenido', 'uso de ia'] },
+                { title: '12. APPENDIX — ARCHIVOS Y DATOS',
+                  hints: ['drive', 'onedrive', 'dropbox', 'archivos', 'key visual', 'dato adicional'] },
+            ];
+
+            const botLines = allBot.split('\n').map(l => l.trim()).filter(Boolean);
+
+            for (const { title, hints } of SECTIONS) {
+                addSection(title);
+
+                // Buscar líneas relevantes en la conversación
+                const relevant = botLines.filter(line =>
+                    hints.some(h => line.toLowerCase().includes(h))
+                );
+
+                if (relevant.length > 0) {
+                    // Tomar máximo 8 líneas para no llenar la sección
+                    for (const line of relevant.slice(0, 8)) {
+                        if (/^[-*•]\s/.test(line)) addBullet(line);
+                        else addBody(line);
+                    }
+                } else {
+                    addEmpty();
+                }
+            }
+
+            // Anexo: conversación completa para debug
+            addSection('── DATOS RECOPILADOS (mensajes del chat) ──');
+            for (const msg of conversationHistory) {
+                const text = msg.parts[0].text;
+                if (text.startsWith('[DOCUMENTO ADJUNTO:')) continue;
+                const label = msg.role === 'model' ? '🤖 ' : '👤 ';
+                addBody(label + text.slice(0, 300) + (text.length > 300 ? '…' : ''));
+                y += 1;
+            }
+        }
+
+        doc.save('Brief_DEBUG_MELISA.pdf');
+
+    } catch (e) {
+        alert('❌ Error al generar el PDF de debug:\n\n' + e.message + '\n\n' + (e.stack || ''));
+    } finally {
+        if (btn) { btn.textContent = '🐞 PDF'; btn.disabled = false; }
+    }
+}
