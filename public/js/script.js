@@ -150,57 +150,29 @@ let conversationHistory = [];
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 // ── Brief Progress Tracker ──────────────────────────────────────
-// Each entry = { keywords: [...], step: N } — matched against lower-case bot text.
-// Steps are ordered so the LAST matched step determines progress.
-const BRIEF_STEPS = [
-    { keywords: ['nombre', 'correo', 'email', 'te llamas'],         step: 1  },
-    { keywords: ['punto de partida', 'adaptar', 'campaña nueva'],   step: 2  },
-    { keywords: ['documento de referencia', 'brief anterior', 'adjúntalo', 'adjunto'],  step: 3  },
-    { keywords: ['nombre de este proyecto', 'nombre del proyecto', 'nombre de la campaña'], step: 4  },
-    { keywords: ['marca o cliente', 'marca/cliente'],               step: 5  },
-    { keywords: ['lidera el proyecto', 'side de mercado libre', 'contacto principal'], step: 6  },
-    { keywords: ['qué país', 'cuál país', 'países', 'mercados de latam', 'para qué país'], step: 7  },
-    { keywords: ['objetivo principal', 'lanzamiento de producto', 'brand awareness', 'performance y ventas'], step: 8  },
-    { keywords: ['contexto de negocio', 'dinámica de mercado', 'situación motiva'], step: 9  },
-    { keywords: ['reto en una sola oración', 'desafío central', 'como si fuera un tweet'], step: 10 },
-    { keywords: ['métricas de éxito', 'kpis', 'commerce', 'tasa de conversión'],      step: 11 },
-    { keywords: ['público objetivo', 'consumidor ideal', 'demografía', 'psicografía'], step: 12 },
-    { keywords: ['insight del consumidor', 'verdad humana'],        step: 13 },
-    { keywords: ['verdad de marca', 'auténtico', 'apalancar creativamente'],           step: 14 },
-    { keywords: ['contexto cultural', 'fechas especiales', 'tendencias locales'],      step: 15 },
-    { keywords: ['mensaje clave', 'territorio emocional', 'sentimiento queremos provocar'], step: 16 },
-    { keywords: ['ventajas del ecosistema', 'meli play', 'alianzas'],                  step: 17 },
-    { keywords: ['mecánicas promocionales', 'descuentos', 'cupones', 'cashback'],      step: 18 },
-    { keywords: ['formatos', 'home slider', 'banners rtb', 'email marketing'],         step: 19 },
-    { keywords: ['fecha de lanzamiento', 'tiempos', '10 días hábiles'],                step: 20 },
-    { keywords: ['presupuesto', 'inversión en medios', 'producción de activos'],       step: 21 },
-    { keywords: ['archivos', 'key visuals', 'manual de marca', 'logos', 'obligatorios'], step: 22 },
-    { keywords: ['dato adicional', 'estudios de mercado', 'información adicional'],    step: 23 },
-];
+// Progress = (user answers given) / TOTAL_STEPS * 100
+// Each real user message counts as one answered question.
+// Internal document-upload prompts (start with "[DOCUMENTO ADJUNTO:") are excluded.
 const TOTAL_STEPS = 23;
 
 function updateBriefProgress() {
-    // Build a single string from all bot messages for matching
+    // Count how many real user answers have been given (exclude doc-upload system prompts)
+    const userAnswers = conversationHistory.filter(
+        m => m.role === 'user' && !m.parts[0].text.startsWith('[DOCUMENTO ADJUNTO:')
+    ).length;
+
+    // Check if the brief is complete (bot produced the final summary)
     const allBotText = conversationHistory
         .filter(m => m.role === 'model')
         .map(m => m.parts[0].text)
         .join(' ')
         .toLowerCase();
 
-    // Check if brief is complete
     const isComplete = allBotText.includes('resumen final para documento') ||
                        allBotText.includes('brief completo');
 
-    let highestStep = 0;
-    if (!isComplete) {
-        for (const { keywords, step } of BRIEF_STEPS) {
-            if (keywords.some(kw => allBotText.includes(kw))) {
-                if (step > highestStep) highestStep = step;
-            }
-        }
-    }
-
-    const pct = isComplete ? 100 : Math.round((highestStep / TOTAL_STEPS) * 100);
+    const answered = isComplete ? TOTAL_STEPS : Math.min(userAnswers, TOTAL_STEPS);
+    const pct = isComplete ? 100 : Math.round((answered / TOTAL_STEPS) * 100);
 
     const fillEl = document.getElementById('brief-progress-fill');
     const pctEl  = document.getElementById('brief-progress-pct');
