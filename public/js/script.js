@@ -269,7 +269,189 @@ function detectStepInText(text) {
     for (const { step, kw } of STEP_KEYWORDS) {
         if (kw.some(k => lower.includes(k))) return step;
     }
+    // Extra steps not in STEP_KEYWORDS
+    if (/monto del media plan/i.test(text)) return 98; // MeLi: media plan USD
+    if (/inteligencia artificial|uso de ia|autoriza.*ia/i.test(text)) return 99; // AI usage
     return 0;
+}
+
+// ── Brief Data Store ─────────────────────────────────────────────
+// Each field is filled as the user answers the corresponding step.
+// Used to build the PDF independently of MELISA's final summary.
+const briefData = {
+    // Identity
+    userName:            '',
+    userEmail:           '',
+    // Step 1 — Nombre/correo
+    userNameField:       '',
+    // Step 2 — Punto de partida
+    campaignType:        '',
+    // Step 3 — Documento (no data captured, handled via upload)
+    // Step 4 — Nombre campaña
+    campaignName:        '',
+    // Step 5 — Marca/cliente
+    brand:               '',
+    // Step 6 — Líderes
+    projectLeader:       '',
+    // Step 7 — Mercados
+    markets:             '',
+    // Step 8 — Objetivo
+    objective:           '',
+    // Step 9 — Contexto de negocio
+    businessContext:     '',
+    // Step 10 — Reto / Brief tweet
+    challengeTweet:      '',
+    // Step 11 — KPIs
+    kpis:                '',
+    // Step 12 — Audiencia
+    targetAudience:      '',
+    // Step 13 — Consumer insight
+    consumerInsight:     '',
+    // Step 14 — Verdad de marca
+    brandTruth:          '',
+    // Step 15 — Contexto cultural
+    culturalContext:     '',
+    // Step 16 — Mensaje clave
+    keyMessage:          '',
+    // Step 17 — Ecosistema MeLi
+    meliEcosystem:       '',
+    // Step 18 — Mecánicas promocionales
+    promotionalMechanics:'',
+    // Step 19 — Formatos de medios
+    mediaFormats:        '',
+    // Step 20 — Fecha de lanzamiento
+    launchDate:          '',
+    // Step 21 — Presupuesto
+    budget:              '',
+    // Step 22 — Archivos de referencia
+    referenceFiles:      '',
+    // Step 23 — Data adicional
+    additionalData:      '',
+    // Step 98 — Media plan USD (MeLi only)
+    mediaPlanUSD:        '',
+    // Step 99 — Uso de IA
+    aiUsage:             '',
+};
+
+/** Maps step number → briefData key */
+const STEP_TO_FIELD = {
+    1:  'userNameField',
+    2:  'campaignType',
+    4:  'campaignName',
+    5:  'brand',
+    6:  'projectLeader',
+    7:  'markets',
+    8:  'objective',
+    9:  'businessContext',
+    10: 'challengeTweet',
+    11: 'kpis',
+    12: 'targetAudience',
+    13: 'consumerInsight',
+    14: 'brandTruth',
+    15: 'culturalContext',
+    16: 'keyMessage',
+    17: 'meliEcosystem',
+    18: 'promotionalMechanics',
+    19: 'mediaFormats',
+    20: 'launchDate',
+    21: 'budget',
+    22: 'referenceFiles',
+    23: 'additionalData',
+    98: 'mediaPlanUSD',
+    99: 'aiUsage',
+};
+
+/** Tracks which step the bot last asked, so next user reply can be stored. */
+let lastAskedStep = 0;
+
+/**
+ * Stores the current user answer under the correct briefData field,
+ * based on which step the bot last asked about.
+ */
+function storeBriefAnswer(text) {
+    const field = STEP_TO_FIELD[lastAskedStep];
+    if (field && text && !text.startsWith('[DOCUMENTO ADJUNTO:')) {
+        briefData[field] = text.trim();
+    }
+    // Always try to extract name/email regardless of step
+    if (!briefData.userName && lastAskedStep === 1) {
+        // Name is usually first word(s) before email
+        const nameMatch = text.match(/^([^@\n,]+?)(?:\s*[,\n]|\s+[a-zA-Z0-9._%+\-]+@)/);
+        if (nameMatch) briefData.userName = nameMatch[1].trim();
+        else if (!text.includes('@')) briefData.userName = text.trim();
+    }
+    if (userEmail) briefData.userEmail = userEmail; // sync with MeLi detection
+}
+
+/**
+ * Builds a structured brief text from briefData.
+ * Empty fields show as "Por definir".
+ * Called for PDF and email generation at any point in the conversation.
+ */
+function buildBriefFromData() {
+    const nd = (v) => v && v.trim() ? v.trim() : 'Por definir';
+    const date = new Date().toLocaleDateString('es-MX', {
+        year: 'numeric', month: 'long', day: 'numeric'
+    });
+    const mediaPlanLine = (isMeliUser && briefData.mediaPlanUSD)
+        ? `\nMedia Plan (USD): ${nd(briefData.mediaPlanUSD)}` : '';
+
+    return `
+### 0. INFORMACIÓN GENERAL DEL PROYECTO
+Nombre del proyecto / campaña: ${nd(briefData.campaignName)}
+Marca / Cliente: ${nd(briefData.brand)}
+Tipo de proyecto: ${nd(briefData.campaignType)}
+Líderes: ${nd(briefData.projectLeader)}
+Usuario: ${nd(briefData.userNameField || briefData.userName)}
+Correo: ${nd(briefData.userEmail)}
+Fecha de preparación: ${date}
+
+### 1. OBJETIVO DE CAMPAÑA
+${nd(briefData.objective)}
+
+### 2. THE CHALLENGE
+${nd(briefData.businessContext)}
+
+**Brief en un Tweet:** ${nd(briefData.challengeTweet)}
+
+### 3. MÉTRICAS DE ÉXITO (KPIs)
+${nd(briefData.kpis)}
+
+### 4. STRATEGIC FOUNDATION
+Audiencia objetivo: ${nd(briefData.targetAudience)}
+
+Insight del consumidor: ${nd(briefData.consumerInsight)}
+
+Verdad de Marca: ${nd(briefData.brandTruth)}
+
+Contexto Cultural: ${nd(briefData.culturalContext)}
+
+### 5. MENSAJE CLAVE Y TERRITORIO EMOCIONAL
+${nd(briefData.keyMessage)}
+
+### 6. MELI ECOSYSTEM INTEGRATION
+Ventajas del ecosistema: ${nd(briefData.meliEcosystem)}
+
+Mecánicas promocionales: ${nd(briefData.promotionalMechanics)}
+
+### 7. MEDIA ECOSYSTEM
+${nd(briefData.mediaFormats)}
+
+### 8. MERCADOS
+${nd(briefData.markets)}
+
+### 9. PRODUCTION CONSIDERATIONS
+Fecha de lanzamiento: ${nd(briefData.launchDate)}
+Presupuesto estimado: ${nd(briefData.budget)}${mediaPlanLine}
+
+### 10. USO DE INTELIGENCIA ARTIFICIAL
+${nd(briefData.aiUsage)}
+
+### 11. APPENDIX
+${nd(briefData.referenceFiles)}
+
+Información adicional: ${nd(briefData.additionalData)}
+`.trim();
 }
 
 function updateBriefProgress() {
@@ -401,7 +583,8 @@ async function enviar() {
     input.value = '';
 
     conversationHistory.push({ role: "user", parts: [{ text: text }] });
-    detectUserEmail(text); // check if user shared a MeLi email
+    detectUserEmail(text);       // check if user shared a MeLi email
+    storeBriefAnswer(text);      // store answer under the current step
     await llamarAPI(text);
 }
 
@@ -483,6 +666,10 @@ async function llamarAPI(originalText, _retry = true) {
         }
 
         conversationHistory.push({ role: "model", parts: [{ text: botFullText }] });
+
+        // Detect which step the bot just asked → next user reply will be stored under it
+        const detectedStep = detectStepInText(botFullText);
+        if (detectedStep > 0) lastAskedStep = detectedStep;
 
         // Update the progress bar after every bot response
         updateBriefProgress();
@@ -631,28 +818,34 @@ function showDownloadBubble() {
 }
 
 /**
- * Busca en el historial el bloque del resumen final.
- * Si no lo encuentra, devuelve el último mensaje del modelo.
+ * Returns the brief content for PDF/email generation.
+ * Priority: 1) briefData (live collected answers)
+ *           2) RESUMEN FINAL marker in history (MELISA's final summary)
+ *           3) Last model message (last resort)
  */
 function getFinalBriefContent() {
-    let finalSummary = "";
+    // ① Build from live data if we have meaningful content
+    const liveFields = Object.values(briefData).filter(v => v && v.trim());
+    if (liveFields.length >= 3) {
+        return buildBriefFromData();
+    }
+
+    // ② Fall back to MELISA's final summary marker
     for (let i = conversationHistory.length - 1; i >= 0; i--) {
         const text = conversationHistory[i].parts[0].text;
         if (text.includes("--- RESUMEN FINAL PARA DOCUMENTO ---")) {
             const parts = text.split("--- RESUMEN FINAL PARA DOCUMENTO ---");
-            finalSummary = parts[parts.length - 1].trim();
-            break;
+            return parts[parts.length - 1].trim();
         }
     }
-    if (!finalSummary) {
-        for (let i = conversationHistory.length - 1; i >= 0; i--) {
-            if (conversationHistory[i].role === "model") {
-                finalSummary = conversationHistory[i].parts[0].text;
-                break;
-            }
+
+    // ③ Last resort: last model message
+    for (let i = conversationHistory.length - 1; i >= 0; i--) {
+        if (conversationHistory[i].role === "model") {
+            return conversationHistory[i].parts[0].text;
         }
     }
-    return finalSummary;
+    return '';
 }
 
 // ── Helper: load asset as base64 via fetch (no CORS canvas issues) ──
