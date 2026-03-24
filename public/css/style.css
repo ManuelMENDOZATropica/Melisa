@@ -392,7 +392,72 @@ body::before {
     }
 }
 
+/* ─── Closing Card (brief ready + next steps) ────────────────── */
+.closing-card {
+    max-width: 100% !important;
+}
+
+.closing-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--ml-dark);
+    margin-bottom: 4px !important;
+}
+
+.closing-sub {
+    font-size: 0.88rem;
+    color: #555;
+    margin-bottom: 14px !important;
+    line-height: 1.5;
+}
+
+.next-steps {
+    background: linear-gradient(135deg, #f0f5ff 0%, #fffbea 100%);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+    border-left: 3px solid var(--ml-blue);
+}
+
+.next-steps-label {
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--ml-blue);
+    margin-bottom: 10px !important;
+}
+
+.next-steps-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.next-steps-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 0.88rem;
+    color: #333;
+    line-height: 1.45;
+}
+
+.ns-icon {
+    font-size: 1.05rem;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.next-steps-list li strong {
+    color: var(--ml-dark);
+}
+
 /* ─── Brief Progress Bar ─────────────────────────────────────── */
+
 #debugPdfBtn {
     font-size: 0.65rem;
     font-family: 'Inter', sans-serif;

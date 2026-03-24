@@ -581,17 +581,52 @@ function renderQuickReplies(botDiv, text) {
 
 function showDownloadBubble() {
     const chat = document.getElementById('chat-window');
-    const dlDiv = document.createElement('div');
-    dlDiv.className = 'msg bot';
-    dlDiv.innerHTML = `
-        <p>✅ ¡Tu brief está listo!</p>
-        <p>Recuerda que un brief completo es el punto de partida de todo proyecto exitoso. Cuanta más claridad tengas aquí, mejores serán las ideas, los tiempos y los resultados. 🌴✨</p>
-        <p>Puedes descargarlo ahora:</p>
+
+    // ── Avatar row (same pattern as bot messages) ──
+    const row = document.createElement('div');
+    row.className = 'bot-row';
+
+    const avatar = document.createElement('img');
+    avatar.src = 'assets/MelissaIconChat.png';
+    avatar.alt = 'MELISA';
+    avatar.className = 'bot-avatar';
+
+    const card = document.createElement('div');
+    card.className = 'msg bot closing-card';
+    card.innerHTML = `
+        <p class="closing-title">✅ ¡Tu brief está listo!</p>
+        <p class="closing-sub">Un brief completo es el punto de partida de todo proyecto exitoso. Cuanta más claridad aquí, mejores resultados. 🌴</p>
+
+        <div class="next-steps">
+            <p class="next-steps-label">¿Qué sigue?</p>
+            <ol class="next-steps-list">
+                <li>
+                    <span class="ns-icon">📄</span>
+                    <span><strong>Descarga el brief</strong> y compártelo con tu equipo interno para alinear visiones.</span>
+                </li>
+                <li>
+                    <span class="ns-icon">📬</span>
+                    <span><strong>Envía el brief a Trópica</strong> — lo revisaremos y te contactaremos para agendar el kick-off creativo.</span>
+                </li>
+                <li>
+                    <span class="ns-icon">🎨</span>
+                    <span><strong>Kick-off creativo</strong> — en esa sesión definimos territorios, referencias y primeras ideas.</span>
+                </li>
+                <li>
+                    <span class="ns-icon">🚀</span>
+                    <span><strong>Producción y entrega</strong> — Trópica lidera la ejecución creativa de principio a fin.</span>
+                </li>
+            </ol>
+        </div>
+
         <button class="btn-download-brief" onclick="descargarBrief()">
             📄 Descargar Brief PDF
         </button>
     `;
-    chat.appendChild(dlDiv);
+
+    row.appendChild(avatar);
+    row.appendChild(card);
+    chat.appendChild(row);
     chat.scrollTop = chat.scrollHeight;
 }
 
