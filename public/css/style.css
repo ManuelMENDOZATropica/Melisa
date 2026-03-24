@@ -458,7 +458,8 @@ body::before {
 
 /* ─── Brief Progress Bar ─────────────────────────────────────── */
 
-#debugPdfBtn {
+#debugPdfBtn,
+#debugEmailBtn {
     font-size: 0.65rem;
     font-family: 'Inter', sans-serif;
     padding: 2px 7px;
@@ -470,7 +471,8 @@ body::before {
     transition: background 0.2s, color 0.2s;
     white-space: nowrap;
 }
-#debugPdfBtn:hover {
+#debugPdfBtn:hover,
+#debugEmailBtn:hover {
     background: var(--ml-dark);
     color: #fff;
     border-color: var(--ml-dark);

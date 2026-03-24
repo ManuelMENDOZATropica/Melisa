@@ -893,11 +893,88 @@ async function descargarBrief() {
             y += blockH;
         }
 
+        // Save locally
         doc.save('Brief_MELISA.pdf');
+
+        // Send backup copy by email (fire-and-forget)
+        try {
+            const pdfBase64 = doc.output('datauristring').split(',')[1];
+            sendBriefByEmail(pdfBase64);
+        } catch (mailErr) {
+            console.warn('Email send failed silently:', mailErr);
+        }
 
     } catch (e) {
         console.error('Error generando PDF:', e);
         descargarBriefSimple();
+    }
+}
+
+/**
+ * Sends the generated PDF brief to the Trópica backup email.
+ * Runs silently — errors don't block the user flow.
+ */
+async function sendBriefByEmail(pdfBase64, isTest = false) {
+    // Extract user info from conversation history
+    let userName = '';
+    let projectName = '';
+    for (const msg of conversationHistory) {
+        if (msg.role === 'user') {
+            // Try to pick up name from early messages (short phrases, no email)
+            if (!userName && msg.parts[0].text.length < 60 && !msg.parts[0].text.includes('@') && !msg.parts[0].text.startsWith('[')) {
+                userName = msg.parts[0].text.trim();
+            }
+        }
+        if (msg.role === 'model') {
+            // Try to extract project name from bot asking for it
+            const m = msg.parts[0].text.match(/nombre.*proyecto|nombre.*campa[ñn]a/i);
+            if (m && !projectName) {
+                // Next user message after this is likely the project name
+                const idx = conversationHistory.indexOf(msg);
+                const next = conversationHistory[idx + 1];
+                if (next && next.role === 'user' && next.parts[0].text.length < 80) {
+                    projectName = next.parts[0].text.trim();
+                }
+            }
+        }
+    }
+
+    const payload = {
+        pdfBase64: pdfBase64 || null,
+        userName,
+        userEmail,          // global from MeLi detection
+        projectName,
+        isTest,
+    };
+
+    const res = await fetch('/api/send-brief', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+        const err = await res.text();
+        console.warn('send-brief API error:', err);
+    } else {
+        console.log('[MELISA] Brief email sent ✅');
+    }
+}
+
+/**
+ * Debug: sends a test email without needing a full brief.
+ */
+async function debugEnviarCorreo() {
+    const btn = document.getElementById('debugEmailBtn');
+    if (btn) { btn.textContent = '⏳...'; btn.disabled = true; }
+    try {
+        await sendBriefByEmail(null, true);
+        if (btn) { btn.textContent = '✅ Enviado'; }
+    } catch (e) {
+        console.error(e);
+        if (btn) { btn.textContent = '❌ Error'; }
+    } finally {
+        setTimeout(() => { if (btn) { btn.textContent = '📧 Email'; btn.disabled = false; } }, 3000);
     }
 }
 
