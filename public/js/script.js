@@ -1108,35 +1108,13 @@ async function descargarBrief() {
  * Runs silently — errors don't block the user flow.
  */
 async function sendBriefByEmail(pdfBase64, isTest = false) {
-    // Extract user info from conversation history
-    let userName = '';
-    let projectName = '';
-    for (const msg of conversationHistory) {
-        if (msg.role === 'user') {
-            // Try to pick up name from early messages (short phrases, no email)
-            if (!userName && msg.parts[0].text.length < 60 && !msg.parts[0].text.includes('@') && !msg.parts[0].text.startsWith('[')) {
-                userName = msg.parts[0].text.trim();
-            }
-        }
-        if (msg.role === 'model') {
-            // Try to extract project name from bot asking for it
-            const m = msg.parts[0].text.match(/nombre.*proyecto|nombre.*campa[ñn]a/i);
-            if (m && !projectName) {
-                // Next user message after this is likely the project name
-                const idx = conversationHistory.indexOf(msg);
-                const next = conversationHistory[idx + 1];
-                if (next && next.role === 'user' && next.parts[0].text.length < 80) {
-                    projectName = next.parts[0].text.trim();
-                }
-            }
-        }
-    }
+    // Sync email into briefData before sending
+    if (userEmail) briefData.userEmail = userEmail;
 
     const payload = {
         pdfBase64: pdfBase64 || null,
-        userName,
-        userEmail,          // global from MeLi detection
-        projectName,
+        briefData,          // full structured data for email summary
+        isMeliUser,         // to show/hide media plan line
         isTest,
     };
 
