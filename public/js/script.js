@@ -1133,13 +1133,61 @@ async function sendBriefByEmail(pdfBase64, isTest = false) {
 }
 
 /**
- * Debug: sends a test email without needing a full brief.
+ * Debug: generates a PDF from current briefData and sends a full test email.
  */
 async function debugEnviarCorreo() {
     const btn = document.getElementById('debugEmailBtn');
     if (btn) { btn.textContent = '⏳...'; btn.disabled = true; }
     try {
-        await sendBriefByEmail(null, true);
+        // Try to generate a real PDF from current data
+        let pdfBase64 = null;
+        try {
+            const finalSummary = getFinalBriefContent();
+            if (finalSummary) {
+                const { jsPDF } = window.jspdf;
+                const fondoB64 = await loadAsBase64('assets/fondo.jpg');
+                const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+                const PW = doc.internal.pageSize.getWidth();
+                const PH = doc.internal.pageSize.getHeight();
+                const YELLOW = [255, 230, 0], DARK = [0, 48, 135], WHITE = [255, 255, 255];
+                const BANNER_H = 22, FOOTER_H = 10, ML = 18, MR = 18;
+                const TW = PW - ML - MR;
+                const Y_START = BANNER_H + 8, Y_END = PH - FOOTER_H - 4;
+                let page = 1;
+                const drawChrome = (pg) => {
+                    doc.addImage(fondoB64, 'JPEG', 0, 0, PW, PH);
+                    doc.setFillColor(255, 255, 255); doc.rect(0, BANNER_H, PW, PH - BANNER_H - FOOTER_H, 'F');
+                    doc.setFillColor(...YELLOW); doc.rect(0, 0, PW, BANNER_H, 'F');
+                    doc.setFillColor(240, 200, 0); doc.rect(0, BANNER_H, PW, 0.8, 'F');
+                    doc.setFillColor(...DARK); doc.rect(0, PH - FOOTER_H, PW, FOOTER_H, 'F');
+                    doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(...WHITE);
+                    doc.text('[TEST] MELISA — Documento de Prueba', ML, PH - 3.8);
+                    doc.text(`Página ${pg}`, PW - MR, PH - 3.8, { align: 'right' });
+                };
+                drawChrome(page);
+                let y = Y_START;
+                const lines = finalSummary.split('\n');
+                for (const raw of lines) {
+                    const t = raw.trim().replace(/\*\*/g, '');
+                    if (!t || t.startsWith('---')) { y += 1.5; continue; }
+                    const isSection = /^#{1,3}\s/.test(raw) || /^\d+\.\s+[A-ZÁÉÍÓÚ]/.test(t);
+                    const content = t.replace(/^#+\s*/, '');
+                    doc.setFont('helvetica', isSection ? 'bold' : 'normal');
+                    doc.setFontSize(isSection ? 10 : 9);
+                    doc.setTextColor(...(isSection ? DARK : [65, 65, 65]));
+                    const wrp = doc.splitTextToSize(content, TW);
+                    const bH = wrp.length * (isSection ? 5.5 : 4.6) + (isSection ? 3 : 1);
+                    if (y + bH > Y_END) { doc.addPage(); page++; drawChrome(page); y = Y_START; }
+                    doc.text(wrp, ML, y + (isSection ? 5.5 : 4.6));
+                    y += bH;
+                }
+                pdfBase64 = doc.output('datauristring').split(',')[1];
+            }
+        } catch (pdfErr) {
+            console.warn('Test PDF generation skipped:', pdfErr);
+        }
+
+        await sendBriefByEmail(pdfBase64, true);
         if (btn) { btn.textContent = '✅ Enviado'; }
     } catch (e) {
         console.error(e);

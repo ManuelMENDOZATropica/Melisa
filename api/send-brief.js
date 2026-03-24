@@ -22,8 +22,11 @@ const section = (title, content) => `
   </div>`;
 
 /** Builds the HTML email body from briefData */
-function buildEmailHtml(briefData = {}, isMeliUser = false) {
+function buildEmailHtml(briefData = {}, isMeliUser = false, isTest = false) {
     const date = new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' });
+    const testBadge = isTest
+        ? '<span style="background:#fb7185;color:#fff;font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:20px;margin-left:10px;vertical-align:middle;">TEST</span>'
+        : '';
 
     return `
 <!DOCTYPE html>
@@ -34,7 +37,7 @@ function buildEmailHtml(briefData = {}, isMeliUser = false) {
 
   <!-- Header -->
   <div style="background:#FFE600;padding:20px 28px;">
-    <h1 style="margin:0;font-size:1.25rem;color:#003087;font-weight:700;">📄 Nuevo Brief — MELISA</h1>
+    <h1 style="margin:0;font-size:1.25rem;color:#003087;font-weight:700;">📄 Nuevo Brief — MELISA ${testBadge}</h1>
     <p style="margin:4px 0 0;font-size:0.82rem;color:#003087;opacity:0.7;">${date}</p>
   </div>
 
@@ -73,13 +76,63 @@ function buildEmailHtml(briefData = {}, isMeliUser = false) {
   <!-- Footer -->
   <div style="background:#003087;padding:14px 28px;">
     <p style="margin:0;font-size:0.78rem;color:rgba(255,255,255,0.7);">
-      El brief completo está adjunto como PDF · MELISA by Trópica
+      ${isTest ? 'Email de prueba · ' : ''}El brief completo está adjunto como PDF · MELISA by Trópica
     </p>
   </div>
 
 </div>
 </body>
 </html>`;
+}
+
+export default async function handler(req, res) {
+    if (req.method !== 'POST') {
+        return res.status(405).json({ error: 'Method not allowed' });
+    }
+
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+        return res.status(500).json({ error: 'RESEND_API_KEY not configured' });
+    }
+
+    try {
+        const { pdfBase64, briefData = {}, isMeliUser = false, isTest } = req.body;
+        const resend = new Resend(apiKey);
+
+        // ── Attachment ────────────────────────────────────────────────
+        const projectSlug = briefData.campaignName
+            ? briefData.campaignName.replace(/\s+/g, '_').substring(0, 40)
+            : '';
+        const attachments = pdfBase64 ? [{
+            filename: `Brief_MELISA${isTest ? '_TEST' : ''}${projectSlug ? '_' + projectSlug : ''}.pdf`,
+            content: pdfBase64,
+        }] : [];
+
+        // ── Subject ───────────────────────────────────────────────────
+        const subject = isTest
+            ? `🧪 [TEST] Brief MELISA${briefData.campaignName ? ': ' + briefData.campaignName : ''}`
+            : `📄 Nuevo brief${briefData.campaignName ? ': ' + briefData.campaignName : ''}${briefData.brand ? ' · ' + briefData.brand : ''}`;
+
+        // ── Send ──────────────────────────────────────────────────────
+        const { data, error } = await resend.emails.send({
+            from: 'MELISA <onboarding@resend.dev>',
+            to: [NOTIFY_EMAIL],
+            subject,
+            html: buildEmailHtml(briefData, isMeliUser, isTest),
+            attachments,
+        });
+
+        if (error) {
+            console.error('Resend error:', error);
+            return res.status(400).json({ error });
+        }
+
+        return res.status(200).json({ success: true, id: data?.id });
+
+    } catch (err) {
+        console.error('send-brief error:', err);
+        return res.status(500).json({ error: err.message });
+    }
 }
 
 export default async function handler(req, res) {
