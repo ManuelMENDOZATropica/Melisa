@@ -5,7 +5,7 @@ export const config = {
     runtime: 'nodejs',
 };
 
-const NOTIFY_EMAIL = 'manu@tropica.me';
+const NOTIFY_EMAIL = 'manuel@tropica.me';
 
 export default async function handler(req, res) {
     if (req.method !== 'POST') {
@@ -64,7 +64,7 @@ export default async function handler(req, res) {
                 </div>`;
 
         const { data, error } = await resend.emails.send({
-            from: 'MELISA <melisa@tropica.me>',
+            from: 'MELISA <onboarding@resend.dev>',
             to: [NOTIFY_EMAIL],
             subject,
             html: htmlBody,
