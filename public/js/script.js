@@ -165,6 +165,65 @@ Estructura obligatoria del documento:
 `;
 
 let conversationHistory = [];
+
+// ── MeLi user detection ─────────────────────────────────────────
+let isMeliUser = false;
+let userEmail   = '';
+
+/** MeLi email domains (all regional variants + Mercado Pago) */
+const MELI_DOMAINS = [
+    'mercadolibre.com',
+    'mercadolibre.com.ar', 'mercadolibre.com.mx', 'mercadolibre.com.br',
+    'mercadolibre.com.co', 'mercadolibre.com.pe', 'mercadolibre.com.uy',
+    'mercadolibre.com.ve', 'mercadolibre.cl',     'mercadolibre.co',
+    'mercadolibre.com.ec', 'mercadolibre.com.bo', 'mercadolibre.com.py',
+    'mercadopago.com',     'meli.com'
+];
+
+/**
+ * Scans a text for an email address and checks if it belongs to MeLi.
+ * Sets isMeliUser and userEmail globals when found.
+ */
+function detectUserEmail(text) {
+    if (isMeliUser) return; // already detected, don't overwrite
+    const emailMatch = text.match(/[a-zA-Z0-9._%+\-]+@([a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/);
+    if (!emailMatch) return;
+    const email  = emailMatch[0];
+    const domain = emailMatch[1].toLowerCase();
+    userEmail = email;
+    isMeliUser = MELI_DOMAINS.some(d => domain === d || domain.endsWith('.' + d));
+    if (isMeliUser) {
+        console.log(`[MELISA] MeLi user detected: ${email}`);
+    }
+}
+
+/**
+ * Returns the system prompt, appending MeLi context when relevant.
+ */
+function buildSystemPrompt() {
+    if (!isMeliUser) return SYSTEM_PROMPT;
+    return SYSTEM_PROMPT + `
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🏢 CONTEXTO INTERNO — USUARIO MELI
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+El usuario es empleado de Mercado Libre (email: ${userEmail}).
+- Trato más directo y de igual a igual, como colega senior.
+- Puedes usar terminología interna de MeLi sin explicarla (MeLi Ads, MOPS, Meli Play, etc.).
+- Asume que conoce la plataforma, los formatos y el ecosistema.
+- No le expliques qué es Mercado Libre ni sus funcionalidades básicas.
+- Valida y complementa sus ideas desde adentro del proceso creativo.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💰 PASO EXCLUSIVO MELI — MEDIA PLAN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Justo después del PASO 18 (presupuesto de campaña), agrega este paso adicional SOLO para usuarios MeLi:
+PASO 18-MELI → Pregunta: "¿Cuál es el monto del media plan para esta campaña? (en USD)"
+  • Registra el monto como dato clave del brief.
+  • Inclúyelo en la sección "10. PRODUCTION CONSIDERATIONS" del documento final, bajo el label "Media Plan (USD):".`;
+}
+
+
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 // ── Brief Progress Tracker ──────────────────────────────────────
@@ -277,10 +336,14 @@ async function handleFileUpload(input) {
     if (!file) return;
 
     const chat = document.getElementById('chat-window');
+    const statusRow = document.createElement('div');
+    statusRow.className = 'bot-row';
+    statusRow.innerHTML = `<img src="assets/MelissaIconChat.png" alt="MELISA" class="bot-avatar">`;
     const statusDiv = document.createElement('div');
     statusDiv.className = 'msg bot';
     statusDiv.innerHTML = `<span>🌴 Leyendo <b>${file.name}</b>...</span> ${createLoadingDots()}`;
-    chat.appendChild(statusDiv);
+    statusRow.appendChild(statusDiv);
+    chat.appendChild(statusRow);
     chat.scrollTop = chat.scrollHeight;
 
     try {
@@ -338,16 +401,26 @@ async function enviar() {
     input.value = '';
 
     conversationHistory.push({ role: "user", parts: [{ text: text }] });
+    detectUserEmail(text); // check if user shared a MeLi email
     await llamarAPI(text);
 }
 
 async function llamarAPI(originalText, _retry = true) {
     const chat = document.getElementById('chat-window');
 
+    // Create avatar + bubble row
+    const botRow = document.createElement('div');
+    botRow.className = 'bot-row';
+    const avatar = document.createElement('img');
+    avatar.src = 'assets/MelissaIconChat.png';
+    avatar.alt = 'MELISA';
+    avatar.className = 'bot-avatar';
     const botDiv = document.createElement('div');
     botDiv.className = 'msg bot';
     botDiv.innerHTML = createLoadingDots();
-    chat.appendChild(botDiv);
+    botRow.appendChild(avatar);
+    botRow.appendChild(botDiv);
+    chat.appendChild(botRow);
     chat.scrollTop = chat.scrollHeight;
 
     const url = `/api/chat`;
@@ -358,7 +431,7 @@ async function llamarAPI(originalText, _retry = true) {
 
     const payload = {
         system_instruction: {
-            parts: [{ text: SYSTEM_PROMPT }]
+            parts: [{ text: buildSystemPrompt() }]
         },
         contents: historyToSend
     };
@@ -426,7 +499,7 @@ async function llamarAPI(originalText, _retry = true) {
     } catch (e) {
         // Reintentar una vez en errores de red (ej. ERR_HTTP2_SERVER_REFUSED_STREAM)
         if (_retry) {
-            botDiv.remove();
+            botRow.remove();
             await new Promise(r => setTimeout(r, 2000));
             await llamarAPI(originalText, false);
             return;

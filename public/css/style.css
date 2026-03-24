@@ -186,6 +186,31 @@ body::before {
     border-bottom-left-radius: 4px;
 }
 
+/* Row wrapper: avatar + bot bubble side by side */
+.bot-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    align-self: flex-start;
+    max-width: 80%;
+}
+
+.bot-row .msg.bot {
+    align-self: unset;
+    max-width: 100%;
+}
+
+/* Circular avatar */
+.bot-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+}
+
+
 /* User bubble – right, blue */
 .user {
     align-self: flex-end;
