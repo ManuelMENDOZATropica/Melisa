@@ -460,3 +460,54 @@ body::before {
     color: var(--ml-dark);
     text-decoration: underline;
 }
+
+/* ─── Quick Reply Buttons ────────────────────────────────────── */
+.quick-replies {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+    align-self: flex-start;
+    max-width: 72%;
+    animation: msgIn 0.3s ease-out both;
+}
+
+.qr-btn {
+    padding: 7px 16px;
+    border-radius: 20px;
+    border: 1.5px solid var(--ml-blue);
+    background: #fff;
+    color: var(--ml-blue);
+    font-family: 'Inter', sans-serif;
+    font-size: 0.87rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.18s, color 0.18s, transform 0.12s, opacity 0.18s;
+    white-space: nowrap;
+}
+
+.qr-btn:hover {
+    background: var(--ml-blue);
+    color: #fff;
+    transform: translateY(-1px);
+}
+
+.qr-btn:active {
+    transform: translateY(0);
+}
+
+/* Fade out after selection */
+.quick-replies.used {
+    opacity: 0.35;
+    pointer-events: none;
+}
+
+@media (max-width: 600px) {
+    .quick-replies {
+        max-width: 92%;
+    }
+    .qr-btn {
+        font-size: 0.83rem;
+        padding: 6px 13px;
+    }
+}

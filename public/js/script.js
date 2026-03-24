@@ -1,5 +1,5 @@
 const SYSTEM_PROMPT = `
-Eres MELISA, Directora Creativa Tropical, en colaboración con MERCADO ADS.
+Eres MELISA, aliada estratégica de Trópica, en colaboración con MERCADO ADS.
 Tu misión es construir un brief estratégico completo, profesional y listo para presentar.
 Guías la conversación con calidez, inteligencia y alma tropical. 🌴✨🌊
 
@@ -90,7 +90,7 @@ PASO 20 → Pregunta: "¿Hay algún dato adicional de audiencia, estudios de mer
 
 Cuando hayas completado todos los pasos, genera el brief completo.
 Empieza OBLIGATORIAMENTE con la línea exacta: "--- RESUMEN FINAL PARA DOCUMENTO ---"
-Redáctalo como una Directora Creativa senior finalizando un plan estratégico. NADA de "el usuario dijo...".
+Redáctalo como una aliada estratégica experta finalizando un plan de campaña junto al equipo. NADA de "el usuario dijo...".
 
 Estructura obligatoria del documento:
 
@@ -148,6 +148,20 @@ Estructura obligatoria del documento:
 - Si el usuario no sabe algo, sugiere opciones razonables y sigue adelante.
 - Nunca rompas el flujo con meta-comentarios sobre el proceso.
 - ESTILO MELISA: Cálido, inspirador, experto. Emojis con moderación: 🌴✨🌊.
+- FORMATO DE OPCIONES: Siempre que ofrezcas opciones de selección (A/B/C/D, Sí/No, idiomas, etc.) usa EXACTAMENTE este formato en líneas separadas:
+  **(A)** Texto de la opción
+  **(B)** Texto de la opción
+  Así el sistema puede renderizarlas como botones interactivos.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✂️ BREVEDAD Y RITMO — OBLIGATORIO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- RESPUESTAS CORTAS. Cada mensaje conversacional debe tener MÁXIMO 3 líneas + la pregunta. Sin párrafos largos, sin introducciones, sin relleno.
+- NO repitas lo que el usuario acaba de decir. No hagas eco ni resumen de su respuesta anterior.
+- Ve directo al punto: acusa recibo en una frase corta (si aplica) y lanza la siguiente pregunta.
+- NO uses frases de transición vacías como "¡Genial!", "¡Perfecto!", "¡Qué interesante!", "¡Claro que sí!" como único contenido. Si quieres reconocer la respuesta, hazlo con una observación sustanciosa en máximo una línea.
+- Las listas de opciones están permitidas, pero deben ser compactas (máximo 4 ítems, una línea cada uno).
+- El DOCUMENTO FINAL (brief completo) es la ÚNICA excepción a la regla de brevedad: ahí sí se debe extender todo lo necesario.
 `;
 
 let conversationHistory = [];
@@ -400,6 +414,9 @@ async function llamarAPI(originalText, _retry = true) {
         // Update the progress bar after every bot response
         updateBriefProgress();
 
+        // Render quick reply buttons if the message contains selectable options
+        renderQuickReplies(botDiv, botFullText);
+
         // Detectar brief completo e inyectar botón de descarga como burbuja en el chat
         const searchTerms = ["resumen final para documento", "--- resumen final", "brief completo"];
         if (searchTerms.some(term => botFullText.toLowerCase().includes(term))) {
@@ -419,6 +436,73 @@ async function llamarAPI(originalText, _retry = true) {
         let errorTexto = String(e);
         if (e && e.message) errorTexto = e.message;
         botDiv.innerText = "⚠️ Hubo un error de conexión. Por favor intenta de nuevo.";
+    }
+}
+
+/**
+ * Detects selectable options in a bot message and renders pill buttons.
+ * Handles: (A)/(B)/... lettered options, Sí/No, and language choices.
+ */
+function renderQuickReplies(botDiv, text) {
+    // --- 1. Try to extract lettered options: **(A)** or (A) at line start ---
+    const letterPattern = /^\s*\*?\*?\(([A-Da-d])\)\*?\*?\s+(.+)/gm;
+    const letterMatches = [...text.matchAll(letterPattern)];
+
+    if (letterMatches.length >= 2) {
+        const options = letterMatches.map(m => ({
+            label: `(${m[1].toUpperCase()}) ${m[2].trim().replace(/\*\*/g, '')}`,
+            value: `(${m[1].toUpperCase()}) ${m[2].trim().replace(/\*\*/g, '')}`
+        }));
+        appendQuickReplies(options);
+        return;
+    }
+
+    // --- 2. Sí / No ---
+    const lower = text.toLowerCase();
+    const isYesNo = /(\bsí\b|\bsi\b).*(\bno\b)|(\bno\b).*(\bsí\b|\bsi\b)/i.test(text)
+        && !text.includes('(A)') && !text.includes('**(A)');
+    // Trigger only when the question explicitly presents Sí/No as options
+    const hasYesNoKeywords = /(\bsí o no\b|¿sí o no\?|yes or no|sí \/ no|\/\s*no)/i.test(text);
+    if (hasYesNoKeywords) {
+        appendQuickReplies([
+            { label: '✅ Sí', value: 'Sí' },
+            { label: '❌ No', value: 'No' }
+        ]);
+        return;
+    }
+
+    // --- 3. Language choice (first message only) ---
+    if (/which language|qué idioma|en qué idioma|idioma.*prefer/i.test(text)) {
+        appendQuickReplies([
+            { label: '🇪🇸 Español', value: 'Español' },
+            { label: '🇺🇸 English', value: 'English' },
+            { label: '🇧🇷 Português', value: 'Português' }
+        ]);
+        return;
+    }
+
+    function appendQuickReplies(options) {
+        const wrap = document.createElement('div');
+        wrap.className = 'quick-replies';
+
+        options.forEach(opt => {
+            const btn = document.createElement('button');
+            btn.className = 'qr-btn';
+            btn.textContent = opt.label;
+            btn.onclick = () => {
+                // Mark all quick reply groups in this batch as used
+                wrap.classList.add('used');
+                // Fill input and send
+                const input = document.getElementById('userInput');
+                input.value = opt.value;
+                enviar();
+            };
+            wrap.appendChild(btn);
+        });
+
+        const chat = document.getElementById('chat-window');
+        chat.appendChild(wrap);
+        chat.scrollTop = chat.scrollHeight;
     }
 }
 
