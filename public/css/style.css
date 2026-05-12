@@ -305,18 +305,24 @@ body::before {
 }
 
 /* Text input – fills space */
-.input-group input[type="text"] {
+.input-group textarea {
     flex: 1;
     border: none;
     background: transparent;
     font-size: 0.96rem;
     color: #333;
-    padding: 8px 4px;
+    padding: 10px 4px;
     outline: none;
     font-family: 'Inter', sans-serif;
+    resize: none;
+    height: 42px;
+    min-height: 42px;
+    max-height: 120px;
+    overflow-y: auto;
+    line-height: 1.4;
 }
 
-.input-group input[type="text"]::placeholder {
+.input-group textarea::placeholder {
     color: #AAAAAA;
 }
 

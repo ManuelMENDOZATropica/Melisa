@@ -88,8 +88,9 @@
                 📎
             </button>
 
-            <input type="text" id="userInput" placeholder="Escribe aquí..."
-                onkeypress="if(event.key==='Enter') enviar()">
+            <textarea id="userInput" placeholder="Escribe aquí (Shift+Enter para nueva línea)..." rows="1"
+                onkeydown="if(event.key==='Enter' && !event.shiftKey) { event.preventDefault(); enviar(); }"
+                oninput="this.style.height = ''; this.style.height = Math.min(this.scrollHeight, 120) + 'px';"></textarea>
 
             <button id="sendBtn" class="btn-send" onclick="enviar()">
                 Enviar

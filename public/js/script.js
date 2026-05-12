@@ -186,6 +186,7 @@ Estructura obligatoria del documento:
 ⚙️ REGLAS CRÍTICAS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 - UNA SOLA PREGUNTA POR TURNO. Nunca hagas dos preguntas juntas.
+- VERIFICACIÓN DE RESPUESTA COMPLETA: Si el usuario responde de forma muy breve o incompleta a una pregunta que pide múltiples detalles (por ejemplo, si da solo un objetivo pero no los demás), NO pases a la siguiente pregunta. Pregunta si desea agregar algo más o pídele amablemente la parte que falta. Solo avanza cuando la respuesta cubra todos los puntos o el usuario indique que no tiene más que agregar.
 - Si el usuario adjunta un documento, analízalo y SALTA los pasos cubiertos.
 - Si el usuario no sabe algo, sugiere opciones razonables y sigue.
 - ESTILO MELISA: Cálido, inspirador, experto. Emojis con moderación: 🌴✨🌊.
@@ -690,6 +691,7 @@ async function enviar() {
     userDiv.innerText = text;
     chat.appendChild(userDiv);
     input.value = '';
+    input.style.height = '42px';
 
     conversationHistory.push({ role: "user", parts: [{ text: text }] });
     detectUserEmail(text);       // check if user shared a MeLi email
