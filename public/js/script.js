@@ -1615,6 +1615,16 @@ async function enviarDocTexto(texto, nombre) {
     await llamarAPI("");
 }
 
+function sendInitialLanguage(lang) {
+    const qrDiv = document.getElementById('initial-quick-replies');
+    if (qrDiv) {
+        qrDiv.classList.add('used');
+    }
+    const input = document.getElementById('userInput');
+    input.value = lang;
+    enviar();
+}
+
 async function enviar() {
     const input = document.getElementById('userInput');
     const text = input.value.trim();
