@@ -331,6 +331,40 @@ function detectStepInText(text) {
 // ── Brief Data Store ─────────────────────────────────────────────
 // Each field is filled as the user answers the corresponding step.
 // Used to build the PDF independently of MELISA's final summary.
+
+// Diccionario de ejemplos ficticios para guiar al usuario (Proyecto: Tenis Genéricos)
+const STEP_EXAMPLES = {
+    4: "Lanzamiento Colección UrbanStep Verano",
+    5: "UrbanStep (Marca ficticia de tenis)",
+    6: "María López (m.lopez@mercadolibre.com)",
+    7: "Carlos Pérez (Director de Marketing)",
+    8: "(A) Lanzamiento de producto",
+    9: "(A) México",
+    10: "La categoría de tenis urbanos está creciendo, pero hay mucha competencia. Buscamos posicionar nuestro nuevo modelo enfocado en comodidad diaria y precios accesibles.",
+    11: "Lograr que los jóvenes urbanos elijan nuestra nueva línea de tenis cómodos frente a las marcas tradicionales más caras.",
+    12: "Ventas: 15% de incremento durante el primer mes.\nInteracción: +20% de engagement rate en la campaña.",
+    13: "(B) Producto o línea de productos",
+    14: "(C) Incremento de ventas",
+    15: "1. Tenis UrbanStep Blanco\n2. Tenis UrbanStep Negro",
+    16: "Hombres y mujeres de 18 a 35 años, que buscan comodidad para la universidad o el trabajo sin sacrificar estilo y cuidando su bolsillo.",
+    17: "'Quiero unos tenis que se vean bien con todo y sean cómodos para caminar todo el día, pero no quiero pagar una fortuna solo por la marca.'",
+    18: "Directa: Tenis genéricos de tiendas departamentales.\nIndirecta: Zapatos casuales.",
+    19: "Nuestras plantillas de memory foam ofrecen el doble de soporte para largas caminatas a un precio 30% menor que la competencia.",
+    20: "(C) No — necesito que propongan concepto y tagline",
+    21: "Por definir",
+    22: "Camina más ligero, cuida tu día y tu bolsillo.",
+    23: "Libertad, ligereza, frescura, movimiento constante sin cansancio.",
+    24: "Hace un año lanzamos 'ClassicStep', enfocada solo en precio. Esta vez queremos subir el nivel visual destacando la tecnología de la suela.",
+    25: "(A) Sí — para elementos gráficos (fondos, elementos visuales)",
+    26: "Te comparto el enlace a la carpeta con fotos de producto en fondo blanco y nuestro logotipo PNG transparente.",
+    27: "Do's: Usar estilo urbano, modelos diversos.\nDon'ts: No mostrar los tenis en escenarios deportivos o gimnasios (son de lifestyle).",
+    28: "Envío full gratis y 10% de descuento en la compra del segundo par.",
+    29: "Home Slider y Mercado Play (video de 15 segundos).",
+    30: "DOOH de MeLi en centros comerciales.",
+    31: "Inicio: 1 de Junio.\nFin: 30 de Junio.",
+    32: "Tenemos un estudio que muestra que el 60% de nuestro público valora la comodidad por encima de la marca siempre que el diseño sea minimalista."
+};
+
 const briefData = {
     // Identity
     userName:             '',
@@ -759,8 +793,20 @@ async function llamarAPI(originalText, _retry = true) {
         conversationHistory.push({ role: "model", parts: [{ text: botFullText }] });
 
         // Detect which step the bot just asked → next user reply will be stored under it
-        const detectedStep = detectStepInText(botFullText);
-        if (detectedStep > 0) lastAskedStep = detectedStep;
+                const detectedStep = detectStepInText(botFullText);
+        if (detectedStep > 0) {
+            lastAskedStep = detectedStep;
+            
+            // Inyectar Tooltip de ejemplo si existe para este paso
+            if (STEP_EXAMPLES[detectedStep]) {
+                const tooltipHtml = ` <i class="tooltip-icon" data-tooltip="Ejemplo ficticio:\n${STEP_EXAMPLES[detectedStep]}">i</i>`;
+                if (botDiv.innerHTML.includes('</p>')) {
+                    botDiv.innerHTML = botDiv.innerHTML.replace(/(<\/p>)(?![\s\S]*<\/p>)/, tooltipHtml + '$1');
+                } else {
+                    botDiv.innerHTML += tooltipHtml;
+                }
+            }
+        }
 
         // Update the progress bar after every bot response
         updateBriefProgress();
