@@ -658,6 +658,24 @@ async function enviar() {
     conversationHistory.push({ role: "user", parts: [{ text: text }] });
     detectUserEmail(text);       // check if user shared a MeLi email
     storeBriefAnswer(text);      // store answer under the current step
+
+    // Mensaje de privacidad local en el primer turno
+    if (conversationHistory.length === 1) {
+        const botRow = document.createElement('div');
+        botRow.className = 'bot-row';
+        const avatar = document.createElement('img');
+        avatar.src = 'assets/MelissaIconChat.png';
+        avatar.alt = 'MELISA';
+        avatar.className = 'bot-avatar';
+        const botDiv = document.createElement('div');
+        botDiv.className = 'msg bot';
+        botDiv.innerHTML = marked.parse("🔒 **Tus datos están seguros.** Toda la información que compartas es confidencial y no se utilizará para entrenar modelos de Inteligencia Artificial externos.");
+        botRow.appendChild(avatar);
+        botRow.appendChild(botDiv);
+        chat.appendChild(botRow);
+        chat.scrollTop = chat.scrollHeight;
+    }
+
     await llamarAPI(text);
 }
 
