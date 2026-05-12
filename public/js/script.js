@@ -118,6 +118,7 @@ PASO 28 → "¿Se incluirá Branded Content con influencers o generadores de con
   **(A)** Sí — ya contamos con influencers, necesitamos propuesta de guión
   **(B)** Sí — sin influencers definidos, necesitamos propuesta de guión y colaboración
   **(C)** No — sin propuesta de influencers"
+  • IMPORTANTE: Si el usuario selecciona la opción (A) o (B), acompáñalo con este disclaimer: "Ten en cuenta que la contratación o gestión de influencers conlleva tiempos y costos adicionales que deberán contemplarse fuera de los formatos core."
 
 ── BLOQUE 8 · TIEMPOS ──
 
@@ -174,7 +175,7 @@ Estructura obligatoria del documento:
   [Mecánicas por producto]
 
 ### 11. ECOSISTEMA DE MEDIOS
-  Formatos Core Mercado Ads. Amplificación. Branded Content / Influencers.
+  Formatos Core Mercado Ads. Amplificación. Branded Content / Influencers. (Si hay influencers, agrega: "Nota: La contratación o gestión de influencers implica tiempos y costos adicionales fuera de los formatos core").
 
 ### 12. TIMELINE
   Fecha de inicio | Fecha de fin | Consideraciones.
@@ -185,6 +186,7 @@ Estructura obligatoria del documento:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚙️ REGLAS CRÍTICAS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- NUNCA MENCIONES LOS NÚMEROS DE PASO (ej. "Paso 17", "Paso 18"). Mantén la conversación fluida y natural.
 - UNA SOLA PREGUNTA POR TURNO. Nunca hagas dos preguntas juntas.
 - VERIFICACIÓN DE RESPUESTA COMPLETA: Si el usuario responde de forma muy breve o incompleta a una pregunta que pide múltiples detalles (por ejemplo, si da solo un objetivo pero no los demás), NO pases a la siguiente pregunta. Pregunta si desea agregar algo más o pídele amablemente la parte que falta. Solo avanza cuando la respuesta cubra todos los puntos o el usuario indique que no tiene más que agregar.
 - Si el usuario adjunta un documento, analízalo y SALTA los pasos cubiertos.
@@ -544,7 +546,11 @@ ${nd(briefData.promotionalMechanics)}
 ### 11. ECOSISTEMA DE MEDIOS
 Formatos Core: ${nd(briefData.coreFormats)}
 Amplificación: ${nd(briefData.amplification)}
-Branded Content: ${nd(briefData.brandedContent)}
+Branded Content: ${nd(briefData.brandedContent)}${
+    (briefData.brandedContent && briefData.brandedContent.toLowerCase().includes('sí')) 
+    ? '\n*Nota: La contratación o gestión de influencers conlleva tiempos y costos adicionales fuera de los formatos core.*' 
+    : ''
+}
 
 ### 12. TIMELINE
 ${nd(briefData.timeline)}${mediaPlanLine}
