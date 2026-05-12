@@ -611,3 +611,7 @@ body::before {
 .tooltip-icon[data-tooltip]:hover::after, .tooltip-icon[data-tooltip]:hover::before { opacity: 1; pointer-events: auto; }
 .tooltip-icon[data-tooltip]:hover::after { bottom: 140%; }
 .tooltip-icon[data-tooltip]:hover::before { bottom: calc(140% - 12px); }
+
+/* --- Multi-select Quick Replies -------------------------------- */
+.qr-multi.selected { background: var(--ml-blue); color: #fff; border-color: var(--ml-dark); transform: scale(1.02); }
+.qr-confirm { margin-left: 8px; font-weight: 600; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }

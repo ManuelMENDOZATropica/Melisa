@@ -319,7 +319,9 @@ const STEP_KEYWORDS = [
 /** Returns the first step number found via keyword scan in a given text. */
 function detectStepInText(text) {
     const lower = text.toLowerCase();
-    for (const { step, kw } of STEP_KEYWORDS) {
+    // Iteramos al revés para agarrar la ÚLTIMA pregunta que hace MELISA (que es el paso de más alto nivel)
+    for (let i = STEP_KEYWORDS.length - 1; i >= 0; i--) {
+        const { step, kw } = STEP_KEYWORDS[i];
         if (kw.some(k => lower.includes(k))) return step;
     }
     // Extra steps not in STEP_KEYWORDS
@@ -812,7 +814,7 @@ async function llamarAPI(originalText, _retry = true) {
         updateBriefProgress();
 
         // Render quick reply buttons if the message contains selectable options
-        renderQuickReplies(botDiv, botFullText);
+        renderQuickReplies(botDiv, botFullText, detectedStep);
 
         // Detectar brief completo e inyectar botón de descarga como burbuja en el chat
         const searchTerms = ["resumen final para documento", "--- resumen final", "brief completo"];
@@ -840,9 +842,9 @@ async function llamarAPI(originalText, _retry = true) {
  * Detects selectable options in a bot message and renders pill buttons.
  * Handles: (A)/(B)/... lettered options, Sí/No, and language choices.
  */
-function renderQuickReplies(botDiv, text) {
+function renderQuickReplies(botDiv, text, detectedStep) {
     // --- 1. Try to extract lettered options: **(A)** or (A) at line start ---
-    const letterPattern = /^\s*\*?\*?\(([A-Da-d])\)\*?\*?\s+(.+)/gm;
+    const letterPattern = /^\s*\*?\*?\(([A-Ea-e])\)\*?\*?\s+(.+)/gm;
     const letterMatches = [...text.matchAll(letterPattern)];
 
     if (letterMatches.length >= 2) {
@@ -850,7 +852,8 @@ function renderQuickReplies(botDiv, text) {
             label: `(${m[1].toUpperCase()}) ${m[2].trim().replace(/\*\*/g, '')}`,
             value: `(${m[1].toUpperCase()}) ${m[2].trim().replace(/\*\*/g, '')}`
         }));
-        appendQuickReplies(options);
+        // El paso 9 es "Mercados", permitimos selección múltiple
+        appendQuickReplies(options, detectedStep === 9);
         return;
     }
 
@@ -878,24 +881,56 @@ function renderQuickReplies(botDiv, text) {
         return;
     }
 
-    function appendQuickReplies(options) {
+    function appendQuickReplies(options, isMultiSelect = false) {
         const wrap = document.createElement('div');
         wrap.className = 'quick-replies';
 
-        options.forEach(opt => {
-            const btn = document.createElement('button');
-            btn.className = 'qr-btn';
-            btn.textContent = opt.label;
-            btn.onclick = () => {
-                // Mark all quick reply groups in this batch as used
+        if (isMultiSelect) {
+            wrap.classList.add('multi-select');
+            let selectedValues = [];
+            
+            options.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.className = 'qr-btn qr-multi';
+                btn.textContent = opt.label;
+                btn.onclick = () => {
+                    btn.classList.toggle('selected');
+                    if (btn.classList.contains('selected')) {
+                        selectedValues.push(opt.value);
+                    } else {
+                        selectedValues = selectedValues.filter(v => v !== opt.value);
+                    }
+                };
+                wrap.appendChild(btn);
+            });
+            
+            const confirmBtn = document.createElement('button');
+            confirmBtn.className = 'qr-btn qr-confirm';
+            confirmBtn.textContent = 'Confirmar ✓';
+            confirmBtn.style.background = 'var(--ml-dark)';
+            confirmBtn.style.color = '#fff';
+            confirmBtn.onclick = () => {
+                if (selectedValues.length === 0) return; // No enviar si está vacío
                 wrap.classList.add('used');
-                // Fill input and send
                 const input = document.getElementById('userInput');
-                input.value = opt.value;
+                input.value = selectedValues.join(', ');
                 enviar();
             };
-            wrap.appendChild(btn);
-        });
+            wrap.appendChild(confirmBtn);
+        } else {
+            options.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.className = 'qr-btn';
+                btn.textContent = opt.label;
+                btn.onclick = () => {
+                    wrap.classList.add('used');
+                    const input = document.getElementById('userInput');
+                    input.value = opt.value;
+                    enviar();
+                };
+                wrap.appendChild(btn);
+            });
+        }
 
         const chat = document.getElementById('chat-window');
         chat.appendChild(wrap);
