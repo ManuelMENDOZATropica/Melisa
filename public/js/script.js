@@ -223,7 +223,18 @@ function detectUserEmail(text) {
     if (!emailMatch) return;
     const email  = emailMatch[0];
     const domain = emailMatch[1].toLowerCase();
-    userEmail = email;
+
+    if (userEmail.toLowerCase() !== 'manu@tropica.me') {
+        userEmail = email;
+    }
+
+    if (userEmail.toLowerCase() === 'manu@tropica.me') {
+        const btnPdf = document.getElementById('debugPdfBtn');
+        const btnEmail = document.getElementById('debugEmailBtn');
+        if (btnPdf) btnPdf.style.display = 'inline-block';
+        if (btnEmail) btnEmail.style.display = 'inline-block';
+    }
+
     isMeliUser = MELI_DOMAINS.some(d => domain === d || domain.endsWith('.' + d));
     if (isMeliUser) {
         console.log(`[MELISA] MeLi user detected: ${email}`);

@@ -1,7 +1,7 @@
 // CommonJS — required for Vercel Node.js runtime
 const { Resend } = require('resend');
 
-const NOTIFY_EMAILS = ['manuel@tropica.me', 'benjamin@tropica.me'];
+const NOTIFY_EMAILS = ['hola@tropica.me'];
 
 /** Returns value or em-dash for empty fields */
 const nd = (v) => (v && String(v).trim()) ? String(v).trim() : '—';
