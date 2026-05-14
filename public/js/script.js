@@ -890,7 +890,10 @@ function renderQuickReplies(botDiv, text, detectedStep) {
             value: `(${m[1].toUpperCase()}) ${m[2].trim().replace(/\*\*/g, '')}`
         }));
         // Pasos con selección múltiple (checkboxes en el brief)
-        const MULTI_SELECT_STEPS = new Set([5, 6, 9, 10, 11, 22, 23, 26, 27, 28, 30.5]);
+        // Números = step interno de STEP_KEYWORDS (≠ PASO del prompt)
+        // 8=TipoCampaña, 9=Mercados, 13=ObjetivoFoco, 14=ObjetivoPrincipal,
+        // 25=UsoIA, 26=KeyFiles, 28=MecánicaPromo, 29=FormatosCore, 30=Amplificación, 30.5=Influencer
+        const MULTI_SELECT_STEPS = new Set([8, 9, 13, 14, 25, 26, 28, 29, 30, 30.5]);
         appendQuickReplies(options, MULTI_SELECT_STEPS.has(detectedStep));
         return;
     }
