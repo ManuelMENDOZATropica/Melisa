@@ -29,13 +29,13 @@ PASO 1 → "¿Cuál es el nombre de este proyecto o campaña?" [Solo opción A]
 PASO 2 → "¿Cuál es la marca?" ⚠️ OBLIGATORIO — nunca lo omitas.
 PASO 3 → "¿Quién es el Project Lead del lado de Mercado Libre (MELI)?"
 PASO 4 → "¿Y quién es el Project Lead del lado de la marca?"
-PASO 5 → "¿Qué tipo de campaña es esta?
+PASO 5 → "¿Qué tipo de campaña es esta? (Puedes elegir más de una)
   **(A)** Lanzamiento de producto
   **(B)** Campaña de temporada
   **(C)** Awareness de marca
   **(D)** Performance / Ventas
   **(E)** Otro"
-PASO 6 → "¿En qué mercado(s) se lanzará la campaña?
+PASO 6 → "¿En qué mercado(s) se lanzará la campaña? (Puedes elegir más de uno)
   **(A)** México
   **(B)** Argentina
   **(C)** Brasil
@@ -50,11 +50,11 @@ PASO 9 → "¿Cuáles son las métricas clave de éxito (KPIs)? Puedes combinar 
   • Objetivos comerciales (ventas, conversión, CPA)
   • Awareness de marca y/o producto
   • Interacción y sentiment en redes"
-PASO 10 → "¿Tu objetivo está centrado principalmente en:
+PASO 10 → "¿Tu objetivo está centrado principalmente en? (Puedes elegir más de uno)
   **(A)** Marca
   **(B)** Producto o línea de productos
   **(C)** Promoción en general"
-PASO 11 → "Selecciona el objetivo principal de campaña:
+PASO 11 → "Selecciona los objetivos principales de campaña (Puedes elegir más de uno):
   **(A)** Awareness
   **(B)** Intención de compra
   **(C)** Incremento de ventas
@@ -82,43 +82,63 @@ PASO 18 → "¿Tienen un tagline definido para esta campaña? Si no, escribe 'Po
 PASO 19 → "¿Cuál es el Key Message? ¿Qué quieres que el consumidor recuerde de esta campaña?"
 PASO 20 → "¿Qué territorio emocional debe evocar la campaña? ¿Qué sentimientos quieres despertar en el consumidor?"
 PASO 21 → "¿Han realizado campañas previas de esta marca o producto? Comparte referencias si las tienes."
-PASO 22 → "¿La marca permite el uso de Inteligencia Artificial para generar recursos visuales?
+PASO 22 → "¿La marca permite el uso de Inteligencia Artificial para generar recursos visuales? (Puedes elegir más de una opción)
   **(A)** Sí — para elementos gráficos (fondos, elementos visuales)
   **(B)** Sí — para productos
   **(C)** Sí — para personas
   **(D)** No se permite el uso de IA"
+  • IMPORTANTE: Si el usuario elige (D) junto con otras, prevalece la restricción — registra solo 'No se permite uso de IA'.
 
 ── BLOQUE 5 · RECURSOS VISUALES ──
 
-PASO 23 → "Para arrancar el desarrollo creativo necesitamos estos materiales. Compárte los vía link (Drive/Dropbox/OneDrive) o adjunta con 📎:
-  • Presentación de campaña (puede ser WIP)
-  • Key Visual / Master Graphic en editable (puede ser WIP)
-  • Manual de marca / Brand Book
-  • Logotipo en editable o .png
-  • Fotografía / Toma del producto"
+PASO 23 → "Para arrancar el desarrollo creativo necesitamos estos materiales. Indica cuáles tienes disponibles (puedes seleccionar varios) y compártelos vía link o adjunta con 📎:
+  **(A)** Presentación de campaña *(puede ser WIP)*
+  **(B)** Key Visual / Master Graphic en editable *(puede ser WIP)*
+  **(C)** Manual de marca / Brand Book
+  **(D)** Logotipo en editable o .png
+  **(E)** Fotografía / Toma del producto"
 PASO 24 → "¿Cuáles son los Do's y Don'ts de tu marca para el desarrollo creativo?"
 
 ── BLOQUE 6 · ARQUITECTURA DE CAMPAÑA ──
 
-PASO 25 → "¿Qué mecánica promocional se va a ofrecer? Define por producto si aplica. Ejemplos:
-  • Hasta X% OFF / Descuento específico / Envíos rápidos / Compra protegida
-  • Cuotas sin intereses / Cupón de descuento / Envío full / Sampling"
+PASO 25 → "¿Qué mecánica(s) promocional(es) se van a ofrecer? (Puedes elegir varias; define por producto si aplica)
+  **(A)** Descuentos: Hasta ____% OFF
+  **(B)** Descuento fijo: ____% OFF
+  **(C)** Envíos rápidos
+  **(D)** Compra protegida
+  **(E)** Envíos en 24 horas
+  **(F)** Hasta ____ cuotas sin intereses
+  **(G)** El envío más rápido de México
+  **(H)** Devoluciones simples
+  **(I)** Cupón de descuento
+  **(J)** Envío full
+  **(K)** Sampling / Merchandising
+  **(L)** Otro"
 
 ── BLOQUE 7 · ECOSISTEMA DE MEDIOS ──
 
-PASO 26 → "¿Qué formatos core de Mercado Ads se incluirán?
-  • Home Slider (display) / RTB Banners (display)
-  • Mercado Play / Disney+ (video 6", 15", 30" — 16:9) / Roku
-  • Clips (9:16) / Landing page en MeLi"
-PASO 27 → "¿Qué formatos de amplificación?
-  • DOOH de MeLi / DOOH fuera de MeLi
-  • Experiencia digital interactiva (fuera de MeLi)
-  • BTL (ej. MeLi Arena São Paulo — solo Brasil)"
-PASO 28 → "¿Se incluirá Branded Content con influencers o generadores de contenido?
-  **(A)** Sí — ya contamos con influencers, necesitamos propuesta de guión
-  **(B)** Sí — sin influencers definidos, necesitamos propuesta de guión y colaboración
+PASO 25.5 → "¿Cuál es el monto de inversión de marca para esta campaña? (en USD)"
+  • Registra este dato como "Monto de Inversión de Marca (USD)" en el brief.
+  • Es un campo obligatorio del brief de Mercado Ads.
+PASO 26 → "¿Qué formatos core de Mercado Ads se incluirán? (Puedes elegir varios)
+  **(A)** Home Slider (display)
+  **(B)** RTB Banners (display)
+  **(C)** Mercado Play / Disney+ (video 6", 15", 30" — 16:9)
+  **(D)** Roku
+  **(E)** Clips (video 6", 15", 30" — 9:16)
+  **(F)** Landing page en MeLi (Mi Página)"
+PASO 27 → "¿Qué formatos de amplificación se consideran? (Puedes elegir varios)
+  **(A)** DOOH de MeLi *(solo el template oficial de MeLi)*
+  **(B)** DOOH fuera de MeLi *(creatividad libre — los espacios se contratan por separado directamente con TRÓPICA)*
+  **(C)** Experiencia digital interactiva fuera de MeLi *(la propuesta creativa está incluida en BrandLab; el desarrollo se cotiza por separado directamente con TRÓPICA)*
+  **(D)** BTL — ej. MeLi Arena São Paulo *(solo Brasil)*"
+  • IMPORTANTE: Si el usuario selecciona (B) o (C), aclara que la propuesta creativa va incluida en BrandLab pero que la contratación/desarrollo se cotiza por separado con TRÓPICA.
+PASO 28 → "¿Se incluirá Influencer Marketing o Branded Content? (Puedes elegir más de una opción)
+  **(A)** Sí — ya contamos con influencers; necesito propuesta de guión *(la propuesta de guión está incluida en BrandLab; la colaboración la gestiona directamente la marca con su equipo de Branded Content)*
+  **(B)** Sí — sin influencers definidos; necesito propuesta de guión y colaboración *(la propuesta de guión está incluida en BrandLab; la colaboración se cotiza por separado directamente con TRÓPICA)*
   **(C)** No — sin propuesta de influencers"
-  • IMPORTANTE: Si el usuario selecciona la opción (A) o (B), acompáñalo con este disclaimer: "Ten en cuenta que la contratación o gestión de influencers conlleva tiempos y costos adicionales que deberán contemplarse fuera de los formatos core."
+  • IMPORTANTE: Si el usuario selecciona la opción (A) o (B), aclara siempre: "La propuesta de guión está incluida en BrandLab. La gestión o contratación de influencers va por separado y tiene tiempos y costos adicionales."
+  • Si selecciona (C) junto con (A) o (B), ignora (C) y procede con la opción afirmativa.
 
 ── BLOQUE 8 · TIEMPOS ──
 
@@ -175,7 +195,7 @@ Estructura obligatoria del documento:
   [Mecánicas por producto]
 
 ### 11. ECOSISTEMA DE MEDIOS
-  Formatos Core Mercado Ads. Amplificación. Branded Content / Influencers. (Si hay influencers, agrega: "Nota: La contratación o gestión de influencers implica tiempos y costos adicionales fuera de los formatos core").
+  Monto de Inversión de Marca (USD). Formatos Core Mercado Ads. Amplificación (con notas de qué está incluido en BrandLab vs. qué se cotiza por separado con TRÓPICA). Branded Content / Influencers (con nota de guión en BrandLab y gestión/contratación por separado).
 
 ### 12. TIMELINE
   Fecha de inicio | Fecha de fin | Consideraciones.
@@ -313,8 +333,10 @@ const STEP_KEYWORDS = [
     { step: 26, kw: ['materiales clave', 'key visual', 'manual de marca', 'brand book', 'logo', 'fotografía del producto'] },
     { step: 27, kw: ["do's y don'ts", 'dos and donts', 'qué no puede', 'restricciones de marca'] },
     { step: 28, kw: ['mecánica promocional', 'qué mecánica', 'descuento', 'cuotas sin intereses', 'envío full'] },
+    { step: 28.5, kw: ['monto de inversión de marca', 'inversión de marca', 'monto de inversión'] },
     { step: 29, kw: ['formatos core', 'home slider', 'rtb banners', 'mercado play', 'clips.*9:16'] },
-    { step: 30, kw: ['amplificación', 'dooh', 'branded content', 'influencers', 'generadores de contenido'] },
+    { step: 30, kw: ['amplificación', 'dooh', 'experiencia digital interactiva', 'btl'] },
+    { step: 30.5, kw: ['influencer marketing', 'branded content', 'influencers', 'generadores de contenido', 'propuesta de guión'] },
     { step: 31, kw: ['fecha de inicio', 'fecha de fin', 'timeline', '10 días hábiles'] },
     { step: 32, kw: ['información adicional', 'dato adicional', 'estudios de mercado', 'requisitos legales'] },
 ];
@@ -330,6 +352,7 @@ function detectStepInText(text) {
     // Extra steps not in STEP_KEYWORDS
     if (/monto del media plan/i.test(text)) return 98; // MeLi: media plan USD
     if (/inteligencia artificial|uso de ia|autoriza.*ia/i.test(text)) return 99; // AI usage
+    if (/monto de inversión de marca|inversión de marca/i.test(text)) return 28.5; // Brand investment
     return 0;
 }
 
@@ -363,10 +386,12 @@ const STEP_EXAMPLES = {
     25: "(A) Sí — para elementos gráficos (fondos, elementos visuales)",
     26: "Te comparto el enlace a la carpeta con fotos de producto en fondo blanco y nuestro logotipo PNG transparente.",
     27: "Do's: Usar estilo urbano, modelos diversos.\nDon'ts: No mostrar los tenis en escenarios deportivos o gimnasios (son de lifestyle).",
-    28: "Envío full gratis y 10% de descuento en la compra del segundo par.",
-    29: "Home Slider y Mercado Play (video de 15 segundos).",
-    30: "DOOH de MeLi en centros comerciales.",
-    31: "Inicio: 1 de Junio.\nFin: 30 de Junio.",
+    28:   "Envío full gratis y 10% de descuento en la compra del segundo par.",
+    28.5: "$50,000 USD",
+    29:   "Home Slider y Mercado Play (video de 15 segundos).",
+    30:   "DOOH de MeLi en centros comerciales y Experiencia digital interactiva.",
+    30.5: "(B) Sí — sin influencers definidos, necesitamos propuesta de guión y colaboración.",
+    31:   "Inicio: 1 de Junio.\nFin: 30 de Junio.",
     32: "Tenemos un estudio que muestra que el 60% de nuestro público valora la comodidad por encima de la marca siempre que el diseño sea minimalista."
 };
 
@@ -409,6 +434,7 @@ const briefData = {
     // Bloque 6 — Arquitectura
     promotionalMechanics: '',
     // Bloque 7 — Ecosistema de medios
+    brandInvestmentUSD:   '',
     coreFormats:          '',
     amplification:        '',
     brandedContent:       '',
@@ -448,12 +474,14 @@ const STEP_TO_FIELD = {
     25: 'aiUsage',
     26: 'referenceFiles',
     27: 'dosAndDonts',
-    28: 'promotionalMechanics',
-    29: 'coreFormats',
-    30: 'amplification',
-    31: 'timeline',
-    32: 'additionalData',
-    98: 'mediaPlanUSD',
+    28:   'promotionalMechanics',
+    28.5: 'brandInvestmentUSD',
+    29:   'coreFormats',
+    30:   'amplification',
+    30.5: 'brandedContent',
+    31:   'timeline',
+    32:   'additionalData',
+    98:   'mediaPlanUSD',
 };
 
 /** Tracks which step the bot last asked, so next user reply can be stored. */
@@ -544,11 +572,12 @@ Do's y Don'ts: ${nd(briefData.dosAndDonts)}
 ${nd(briefData.promotionalMechanics)}
 
 ### 11. ECOSISTEMA DE MEDIOS
+Monto de Inversión de Marca (USD): ${nd(briefData.brandInvestmentUSD)}
 Formatos Core: ${nd(briefData.coreFormats)}
 Amplificación: ${nd(briefData.amplification)}
-Branded Content: ${nd(briefData.brandedContent)}${
+Influencer Marketing / Branded Content: ${nd(briefData.brandedContent)}${
     (briefData.brandedContent && briefData.brandedContent.toLowerCase().includes('sí')) 
-    ? '\n*Nota: La contratación o gestión de influencers conlleva tiempos y costos adicionales fuera de los formatos core.*' 
+    ? '\n*Nota: La propuesta de guión está incluida en BrandLab. La gestión o contratación de influencers tiene tiempos y costos adicionales que se gestionan directamente con TRÓPICA.*' 
     : ''
 }
 
@@ -860,8 +889,9 @@ function renderQuickReplies(botDiv, text, detectedStep) {
             label: `(${m[1].toUpperCase()}) ${m[2].trim().replace(/\*\*/g, '')}`,
             value: `(${m[1].toUpperCase()}) ${m[2].trim().replace(/\*\*/g, '')}`
         }));
-        // El paso 9 es "Mercados", permitimos selección múltiple
-        appendQuickReplies(options, detectedStep === 9);
+        // Pasos con selección múltiple (checkboxes en el brief)
+        const MULTI_SELECT_STEPS = new Set([5, 6, 9, 10, 11, 22, 23, 26, 27, 28, 30.5]);
+        appendQuickReplies(options, MULTI_SELECT_STEPS.has(detectedStep));
         return;
     }
 
