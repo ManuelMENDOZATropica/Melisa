@@ -46,10 +46,10 @@ PASO 6 → "¿En qué mercado(s) se lanzará la campaña? (Puedes elegir más de
 
 PASO 7 → "Cuéntame el contexto del negocio: ¿qué situación motiva esta campaña? Incluye: dinámica de mercado, panorama competitivo, desafíos de posicionamiento y consideraciones de temporalidad o culturales."
 PASO 8 → "En una sola oración — como si fuera un tweet: ¿cuál es el desafío central que esta campaña debe resolver?"
-PASO 9 → "¿Cuáles son las métricas clave de éxito (KPIs)? Puedes combinar varias:
-  • Objetivos comerciales (ventas, conversión, CPA)
-  • Awareness de marca y/o producto
-  • Interacción y sentiment en redes"
+PASO 9 → "¿Cuáles son las métricas clave de éxito (KPIs)? Puedes elegir varias:
+  **(A)** Objetivos comerciales (ventas, conversión, CPA)
+  **(B)** Awareness de marca y/o producto
+  **(C)** Interacción y sentiment en redes"
 PASO 10 → "¿Tu objetivo está centrado principalmente en? (Puedes elegir más de uno)
   **(A)** Marca
   **(B)** Producto o línea de productos
@@ -891,9 +891,9 @@ function renderQuickReplies(botDiv, text, detectedStep) {
         }));
         // Pasos con selección múltiple (checkboxes en el brief)
         // Números = step interno de STEP_KEYWORDS (≠ PASO del prompt)
-        // 8=TipoCampaña, 9=Mercados, 13=ObjetivoFoco, 14=ObjetivoPrincipal,
+        // 8=TipoCampaña, 9=Mercados, 12=KPIs, 13=ObjetivoFoco, 14=ObjetivoPrincipal,
         // 25=UsoIA, 26=KeyFiles, 28=MecánicaPromo, 29=FormatosCore, 30=Amplificación, 30.5=Influencer
-        const MULTI_SELECT_STEPS = new Set([8, 9, 13, 14, 25, 26, 28, 29, 30, 30.5]);
+        const MULTI_SELECT_STEPS = new Set([8, 9, 12, 13, 14, 25, 26, 28, 29, 30, 30.5]);
         appendQuickReplies(options, MULTI_SELECT_STEPS.has(detectedStep));
         return;
     }
