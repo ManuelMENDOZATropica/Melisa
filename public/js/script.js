@@ -247,20 +247,11 @@ function detectUserEmail(text) {
     const email  = emailMatch[0];
     const domain = emailMatch[1].toLowerCase();
 
-    if (userEmail.toLowerCase() !== 'manu@tropica.me') {
-        userEmail = email;
-    }
-
-    if (userEmail.toLowerCase() === 'manu@tropica.me') {
-        const btnPdf = document.getElementById('debugPdfBtn');
-        const btnEmail = document.getElementById('debugEmailBtn');
-        if (btnPdf) btnPdf.style.display = 'inline-block';
-        if (btnEmail) btnEmail.style.display = 'inline-block';
-    }
+    userEmail = email;
 
     isMeliUser = MELI_DOMAINS.some(d => domain === d || domain.endsWith('.' + d));
     if (isMeliUser) {
-        console.log(`[MELISA] MeLi user detected: ${email}`);
+        console.log(`[MELISA] MeLi user detected`);
     }
 }
 
@@ -652,13 +643,16 @@ async function handleFileUpload(input) {
     const file = input.files[0];
     if (!file) return;
 
+    // H-2 · Sanitize filename before inserting into DOM
+    const safeName = DOMPurify.sanitize(file.name);
+
     const chat = document.getElementById('chat-window');
     const statusRow = document.createElement('div');
     statusRow.className = 'bot-row';
     statusRow.innerHTML = `<img src="assets/MelissaIconChat.png" alt="MELISA" class="bot-avatar">`;
     const statusDiv = document.createElement('div');
     statusDiv.className = 'msg bot';
-    statusDiv.innerHTML = `<span>🌴 Leyendo <b>${file.name}</b>...</span> ${createLoadingDots()}`;
+    statusDiv.innerHTML = `<span>🌴 Leyendo <b>${safeName}</b>...</span> ${createLoadingDots()}`;
     statusRow.appendChild(statusDiv);
     chat.appendChild(statusRow);
     chat.scrollTop = chat.scrollHeight;
@@ -672,8 +666,8 @@ async function handleFileUpload(input) {
         }
 
         if (extractedText) {
-            statusDiv.innerHTML = `✅ Documento <b>"${file.name}"</b> analizado. MELISA le está sacando el jugo... ${createLoadingDots()}`;
-            await enviarDocTexto(extractedText, file.name);
+            statusDiv.innerHTML = `✅ Documento <b>"${safeName}"</b> analizado. MELISA le está sacando el jugo... ${createLoadingDots()}`;
+            await enviarDocTexto(extractedText, safeName);
         }
     } catch (e) {
         statusDiv.style.color = "#fb7185";
@@ -742,7 +736,7 @@ async function enviar() {
         avatar.className = 'bot-avatar';
         const botDiv = document.createElement('div');
         botDiv.className = 'msg bot';
-        botDiv.innerHTML = marked.parse("🔒 **Tus datos están seguros.** Toda la información que compartas es confidencial y no se utilizará para entrenar modelos de Inteligencia Artificial externos.");
+        botDiv.innerHTML = DOMPurify.sanitize(marked.parse("🔒 **Tus datos están seguros.** Toda la información que compartas es confidencial y no se utilizará para entrenar modelos de Inteligencia Artificial externos."));
         botRow.appendChild(avatar);
         botRow.appendChild(botDiv);
         chat.appendChild(botRow);
@@ -772,9 +766,14 @@ async function llamarAPI(originalText, _retry = true) {
 
     const url = `/api/chat`;
 
-    // Limitar historial a los últimos 20 mensajes para evitar payloads grandes
-    // que provocan ERR_HTTP2_SERVER_REFUSED_STREAM en Vercel Edge
-    const historyToSend = conversationHistory.slice(-20);
+    // M-4 · Limit history to last 20 messages and truncate large PDF uploads
+    const historyToSend = conversationHistory.slice(-20).map(msg => {
+        const text = msg.parts[0].text;
+        if (text.startsWith('[DOCUMENTO ADJUNTO:') && text.length > 15_000) {
+            return { ...msg, parts: [{ text: text.substring(0, 15_000) + '\n[...contenido truncado por seguridad...]' }] };
+        }
+        return msg;
+    });
 
     const payload = {
         system_instruction: {
@@ -821,7 +820,7 @@ async function llamarAPI(originalText, _retry = true) {
                         if (data.candidates && data.candidates[0].content) {
                             const newText = data.candidates[0].content.parts[0].text;
                             botFullText += newText;
-                            botDiv.innerHTML = marked.parse(botFullText);
+                            botDiv.innerHTML = DOMPurify.sanitize(marked.parse(botFullText));
                             chat.scrollTop = chat.scrollHeight;
                         }
                     } catch (e) { }

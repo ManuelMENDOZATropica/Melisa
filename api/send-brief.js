@@ -3,21 +3,40 @@ const { Resend } = require('resend');
 
 const NOTIFY_EMAILS = ['hola@tropica.me'];
 
-/** Returns value or em-dash for empty fields */
-const nd = (v) => (v && String(v).trim()) ? String(v).trim() : '—';
+/** Security headers added to every response */
+const SEC_HEADERS = {
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+};
+
+/** H-3 · HTML-escape a value, truncated at 2000 chars. Prevents XSS in email HTML. */
+const esc = (v) => {
+    if (!v) return '—';
+    return String(v).trim()
+        .substring(0, 2000)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#x27;') || '—';
+};
+
+/** Returns value or em-dash for empty fields (plain text context) */
+const nd = (v) => (v && String(v).trim()) ? String(v).trim().substring(0, 2000) : '—';
 
 /** One summary row */
 const row = (label, value) => `
   <tr>
-    <td style="padding:7px 12px 7px 0;color:#888;font-size:0.82rem;white-space:nowrap;vertical-align:top;width:160px;">${label}</td>
-    <td style="padding:7px 0;color:#222;font-size:0.88rem;vertical-align:top;">${nd(value)}</td>
+    <td style="padding:7px 12px 7px 0;color:#888;font-size:0.82rem;white-space:nowrap;vertical-align:top;width:160px;">${esc(label)}</td>
+    <td style="padding:7px 0;color:#222;font-size:0.88rem;vertical-align:top;">${esc(value)}</td>
   </tr>`;
 
 /** Section block */
 const section = (title, content) => `
   <div style="margin-bottom:18px;">
-    <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#1259C3;margin-bottom:6px;">${title}</div>
-    <div style="color:#333;font-size:0.88rem;line-height:1.55;">${nd(content)}</div>
+    <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#1259C3;margin-bottom:6px;">${esc(title)}</div>
+    <div style="color:#333;font-size:0.88rem;line-height:1.55;">${esc(content)}</div>
   </div>`;
 
 function buildEmailHtml(briefData, isMeliUser, isTest) {
@@ -87,6 +106,9 @@ function buildEmailHtml(briefData, isMeliUser, isTest) {
 }
 
 module.exports = async function handler(req, res) {
+    // Apply security headers to all responses
+    Object.entries(SEC_HEADERS).forEach(([k, v]) => res.setHeader(k, v));
+
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method not allowed' });
     }
@@ -98,6 +120,12 @@ module.exports = async function handler(req, res) {
 
     try {
         const { pdfBase64, briefData, isMeliUser, isTest } = req.body;
+
+        // H-3 · Validate PDF size (max ~3.7 MB decoded ≈ 5 MB base64)
+        if (pdfBase64 && pdfBase64.length > 5_000_000) {
+            return res.status(413).json({ error: 'PDF attachment too large' });
+        }
+
         const resend = new Resend(apiKey);
 
         // Attachment
