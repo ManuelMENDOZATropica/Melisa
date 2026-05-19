@@ -1018,7 +1018,7 @@ function showDownloadBubble() {
             </ol>
         </div>
 
-        <button class="btn-download-brief" onclick="descargarBrief()">
+        <button class="btn-download-brief" id="btn-download-brief">
             📄 Descargar Brief PDF
         </button>
     `;
@@ -1026,6 +1026,11 @@ function showDownloadBubble() {
     row.appendChild(avatar);
     row.appendChild(card);
     chat.appendChild(row);
+
+    // Bind download button (CSP-safe, no inline handler)
+    const dlBtn = card.querySelector('#btn-download-brief');
+    if (dlBtn) dlBtn.addEventListener('click', () => descargarBrief());
+
     chat.scrollTop = chat.scrollHeight;
 }
 
@@ -1694,3 +1699,47 @@ async function debugGenerarPDF() {
         if (btn) { btn.textContent = '🐞 PDF'; btn.disabled = false; }
     }
 }
+
+// ── CSP-Safe Event Bindings ──────────────────────────────────────
+// All inline handlers (onclick, onchange, onkeydown, oninput) were
+// removed from index.html to comply with CSP script-src policy.
+// They are bound here via addEventListener instead.
+
+// Download button (hidden in header)
+const downloadBtn = document.getElementById('downloadBtn');
+if (downloadBtn) downloadBtn.addEventListener('click', () => descargarBrief());
+
+// Initial language quick-reply buttons
+const initialQR = document.getElementById('initial-quick-replies');
+if (initialQR) {
+    initialQR.querySelectorAll('.qr-btn[data-lang]').forEach(btn => {
+        btn.addEventListener('click', () => sendInitialLanguage(btn.dataset.lang));
+    });
+}
+
+// File input change
+const fileInput = document.getElementById('fileInput');
+if (fileInput) fileInput.addEventListener('change', () => handleFileUpload(fileInput));
+
+// Attach button → trigger file picker
+const attachBtn = document.getElementById('attachBtn');
+if (attachBtn) attachBtn.addEventListener('click', () => fileInput.click());
+
+// Textarea: Enter to send, auto-resize
+const userInput = document.getElementById('userInput');
+if (userInput) {
+    userInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            enviar();
+        }
+    });
+    userInput.addEventListener('input', function () {
+        this.style.height = '';
+        this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+    });
+}
+
+// Send button
+const sendBtn = document.getElementById('sendBtn');
+if (sendBtn) sendBtn.addEventListener('click', () => enviar());

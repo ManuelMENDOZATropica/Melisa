@@ -9,13 +9,14 @@
                  script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com;
                  style-src 'self' https://fonts.googleapis.com 'unsafe-inline';
                  font-src https://fonts.gstatic.com;
-                 connect-src 'self' https://generativelanguage.googleapis.com;
+                 connect-src 'self' https://generativelanguage.googleapis.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com;
                  img-src 'self' data: blob:;
                  worker-src blob:;
                  object-src 'none';
                  base-uri 'self';
-                 form-action 'self';
-                 frame-ancestors 'none';">
+                 form-action 'self';">
+    <!-- Inline favicon to prevent 404 -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌴</text></svg>">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="description"
         content="MELISA — Tu aliada estratégica en TRÓPICA. Te guía para construir briefs completos, estratégicos y hermosos.">
@@ -45,7 +46,7 @@
         <!-- Hidden elements kept for JS compatibility -->
         <h1 style="display:none">TRÓPICA</h1>
         <p style="display:none">MELISA</p>
-        <button id="downloadBtn" onclick="descargarBrief()" style="display:none">Descargar Brief PDF</button>
+        <button id="downloadBtn" style="display:none">Descargar Brief PDF</button>
     </header>
 
     <!-- ── Page Body ───────────────────────────────────── -->
@@ -72,9 +73,9 @@
             
             <!-- Initial quick replies -->
             <div class="quick-replies" id="initial-quick-replies">
-                <button class="qr-btn" onclick="sendInitialLanguage('Español')">🇪🇸 Español</button>
-                <button class="qr-btn" onclick="sendInitialLanguage('English')">🇺🇸 English</button>
-                <button class="qr-btn" onclick="sendInitialLanguage('Português')">🇧🇷 Português</button>
+                <button class="qr-btn" data-lang="Español">🇪🇸 Español</button>
+                <button class="qr-btn" data-lang="English">🇺🇸 English</button>
+                <button class="qr-btn" data-lang="Português">🇧🇷 Português</button>
             </div>
         </div>
 
@@ -92,19 +93,15 @@
 
         <!-- Input area -->
         <div class="input-group">
-            <input type="file" id="fileInput" style="display:none;" accept=".pdf,.docx"
-                onchange="handleFileUpload(this)">
+            <input type="file" id="fileInput" style="display:none;" accept=".pdf,.docx">
 
-            <button id="attachBtn" class="btn-attach" onclick="document.getElementById('fileInput').click()"
-                title="Adjuntar archivo">
+            <button id="attachBtn" class="btn-attach" title="Adjuntar archivo">
                 📎
             </button>
 
-            <textarea id="userInput" placeholder="Escribe aquí (Shift+Enter para nueva línea)..." rows="1"
-                onkeydown="if(event.key==='Enter' && !event.shiftKey) { event.preventDefault(); enviar(); }"
-                oninput="this.style.height = ''; this.style.height = Math.min(this.scrollHeight, 120) + 'px';"></textarea>
+            <textarea id="userInput" placeholder="Escribe aquí (Shift+Enter para nueva línea)..." rows="1"></textarea>
 
-            <button id="sendBtn" class="btn-send" onclick="enviar()">
+            <button id="sendBtn" class="btn-send">
                 Enviar
             </button>
         </div>
