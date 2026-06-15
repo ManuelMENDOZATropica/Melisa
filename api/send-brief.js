@@ -68,7 +68,7 @@ function buildEmailHtml(briefData, isMeliUser, isTest) {
       ${row('Email',           briefData.userEmail)}
       ${row('Proyecto',        briefData.campaignName)}
       ${row('Marca / Cliente', briefData.brand)}
-      ${row('Líderes',         briefData.projectLeader)}
+      ${row('Líderes',         `${nd(briefData.projectLeadMeli)} (MeLi) / ${nd(briefData.projectLeadBrand)} (Marca)`)}
       ${row('Mercados',        briefData.markets)}
       ${isMeliUser ? row('Usuario MeLi', '✅ Sí') : ''}
     </table>
@@ -78,17 +78,17 @@ function buildEmailHtml(briefData, isMeliUser, isTest) {
 
   <!-- Brief sections -->
   <div style="background:#fff;padding:20px 28px 4px;">
-    ${section('Objetivo de campaña',      briefData.objective)}
+    ${section('Tipo y Objetivos de campaña', `Tipo: ${nd(briefData.campaignType)} | Foco: ${nd(briefData.objectiveFocus)} | Principal: ${nd(briefData.objectiveMain)}`)}
     ${section('The Challenge',            briefData.businessContext)}
     ${briefData.challengeTweet ? section('Brief en un Tweet', '<em>"' + briefData.challengeTweet + '"</em>') : ''}
     ${section('KPIs',                     briefData.kpis)}
     ${section('Audiencia objetivo',       briefData.targetAudience)}
     ${section('Consumer Insight',         briefData.consumerInsight)}
-    ${section('Verdad de Marca',          briefData.brandTruth)}
+    ${section('Competencia y Diferenciador', `Competencia: ${nd(briefData.competition)} | Diferenciador: ${nd(briefData.differentiator)}`)}
     ${section('Mensaje clave',            briefData.keyMessage)}
     ${section('Mecánicas promocionales',  briefData.promotionalMechanics)}
-    ${section('Fecha de lanzamiento',     briefData.launchDate)}
-    ${section('Presupuesto',              briefData.budget)}
+    ${section('Tiempos / Cronograma',     briefData.timeline)}
+    ${section('Inversión de Marca',       briefData.brandInvestmentUSD)}
     ${isMeliUser && briefData.mediaPlanUSD ? section('Media Plan (USD)', briefData.mediaPlanUSD) : ''}
     ${section('Uso de IA',               briefData.aiUsage)}
   </div>
@@ -96,7 +96,7 @@ function buildEmailHtml(briefData, isMeliUser, isTest) {
   <!-- Footer -->
   <div style="background:#003087;padding:14px 28px;">
     <p style="margin:0;font-size:0.78rem;color:rgba(255,255,255,0.7);">
-      ${isTest ? 'Email de prueba · ' : ''}Brief completo adjunto como PDF · MELISA by Trópica
+      ${isTest ? 'Email de prueba · ' : ''}Brief completo adjunto como PDF · MELISA by TRÓPICA
     </p>
   </div>
 

@@ -1,5 +1,5 @@
 const SYSTEM_PROMPT = `
-Eres MELISA, aliada estratégica de Trópica, en colaboración con MERCADO ADS.
+Eres MELISA, aliada estratégica de TRÓPICA, en colaboración con MERCADO ADS.
 Tu misión es construir un brief estratégico completo, profesional y listo para presentar.
 Guías la conversación con calidez, inteligencia y alma tropical. 🌴✨🌊
 
@@ -96,7 +96,8 @@ PASO 23 → "Para arrancar el desarrollo creativo necesitamos estos materiales. 
   **(B)** Key Visual / Master Graphic en editable *(puede ser WIP)*
   **(C)** Manual de marca / Brand Book
   **(D)** Logotipo en editable o .png
-  **(E)** Fotografía / Toma del producto"
+  **(E)** Fotografía / Toma del producto
+  **(F)** Ninguno por el momento"
 PASO 24 → "¿Cuáles son los Do's y Don'ts de tu marca para el desarrollo creativo?"
 
 ── BLOQUE 6 · ARQUITECTURA DE CAMPAÑA ──
@@ -113,7 +114,8 @@ PASO 25 → "¿Qué mecánica(s) promocional(es) se van a ofrecer? (Puedes elegi
   **(I)** Cupón de descuento
   **(J)** Envío full
   **(K)** Sampling / Merchandising
-  **(L)** Otro"
+  **(L)** Otro
+  **(M)** Ninguna de las anteriores / No aplica"
 
 ── BLOQUE 7 · ECOSISTEMA DE MEDIOS ──
 
@@ -131,7 +133,8 @@ PASO 27 → "¿Qué formatos de amplificación se consideran? (Puedes elegir var
   **(A)** DOOH de MeLi *(solo el template oficial de MeLi)*
   **(B)** DOOH fuera de MeLi *(creatividad libre — los espacios se contratan por separado directamente con TRÓPICA)*
   **(C)** Experiencia digital interactiva fuera de MeLi *(la propuesta creativa está incluida en BrandLab; el desarrollo se cotiza por separado directamente con TRÓPICA)*
-  **(D)** BTL — ej. MeLi Arena São Paulo *(solo Brasil)*"
+  **(D)** BTL — ej. MeLi Arena São Paulo *(solo Brasil)*
+  **(E)** Ninguna de las anteriores"
   • IMPORTANTE: Si el usuario selecciona (B) o (C), aclara que la propuesta creativa va incluida en BrandLab pero que la contratación/desarrollo se cotiza por separado con TRÓPICA.
 PASO 28 → "¿Se incluirá Influencer Marketing o Branded Content? (Puedes elegir más de una opción)
   **(A)** Sí — ya contamos con influencers; necesito propuesta de guión *(la propuesta de guión está incluida en BrandLab; la colaboración la gestiona directamente la marca con su equipo de Branded Content)*
@@ -218,6 +221,7 @@ Estructura obligatoria del documento:
 - RESPUESTAS CORTAS: Máximo 3 líneas + la pregunta por turno.
 - NO repitas lo que el usuario acaba de decir.
 - El DOCUMENTO FINAL es la ÚNICA excepción a la brevedad.
+- NOMBRE DE LA EMPRESA: Siempre que te refieras a la empresa o marca "Trópica" en cualquiera de tus respuestas, debes escribir obligatoriamente TRÓPICA (en mayúsculas y con tilde en la O). Nunca utilices minúsculas como "Trópica" o "tropica".
 `;
 
 let conversationHistory = [];
@@ -338,7 +342,17 @@ function detectStepInText(text) {
     // Iteramos al revés para agarrar la ÚLTIMA pregunta que hace MELISA (que es el paso de más alto nivel)
     for (let i = STEP_KEYWORDS.length - 1; i >= 0; i--) {
         const { step, kw } = STEP_KEYWORDS[i];
-        if (kw.some(k => lower.includes(k))) return step;
+        if (kw.some(k => {
+            if (k.includes('.*')) {
+                try {
+                    const rx = new RegExp(k, 'i');
+                    return rx.test(text);
+                } catch (e) {
+                    return lower.includes(k.toLowerCase());
+                }
+            }
+            return lower.includes(k.toLowerCase());
+        })) return step;
     }
     // Extra steps not in STEP_KEYWORDS
     if (/monto del media plan/i.test(text)) return 98; // MeLi: media plan USD
@@ -483,16 +497,33 @@ let lastAskedStep = 0;
  * based on which step the bot last asked about.
  */
 function storeBriefAnswer(text) {
-    const field = STEP_TO_FIELD[lastAskedStep];
-    if (field && text && !text.startsWith('[DOCUMENTO ADJUNTO:')) {
-        briefData[field] = text.trim();
-    }
-    // Always try to extract name/email regardless of step
-    if (!briefData.userName && lastAskedStep === 1) {
-        // Name is usually first word(s) before email
-        const nameMatch = text.match(/^([^@\n,]+?)(?:\s*[,\n]|\s+[a-zA-Z0-9._%+\-]+@)/);
-        if (nameMatch) briefData.userName = nameMatch[1].trim();
-        else if (!text.includes('@')) briefData.userName = text.trim();
+    if (lastAskedStep === 1) {
+        // Parse name and email from text
+        const emailMatch = text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
+        if (emailMatch) {
+            briefData.userEmail = emailMatch[0].trim();
+            // Remove email to extract name
+            let namePart = text.replace(emailMatch[0], '').replace(/[,;]/g, '').trim();
+            if (namePart) {
+                namePart = namePart.replace(/\b(mi correo es|mi email es|mi mail es|me llamo|soy|mi nombre es)\b/gi, '').trim();
+                if (namePart) {
+                    briefData.userName = namePart;
+                    briefData.userNameField = namePart;
+                }
+            }
+        } else {
+            // Only name
+            const cleanName = text.replace(/\b(me llamo|soy|mi nombre es)\b/gi, '').trim();
+            if (cleanName) {
+                briefData.userName = cleanName;
+                briefData.userNameField = cleanName;
+            }
+        }
+    } else {
+        const field = STEP_TO_FIELD[lastAskedStep];
+        if (field && text && !text.startsWith('[DOCUMENTO ADJUNTO:')) {
+            briefData[field] = text.trim();
+        }
     }
     if (userEmail) briefData.userEmail = userEmail; // sync with MeLi detection
 }
@@ -694,7 +725,7 @@ async function extractTextFromDocx(file) {
 }
 
 async function enviarDocTexto(texto, nombre) {
-    const promptEspecial = `[DOCUMENTO ADJUNTO: ${nombre}]\n${texto}\n\nAnaliza este documento en silencio. NO muestres al usuario el contenido que encontraste, ni hagas un resumen ni feedback de lo que contiene. Identifica internamente qué pasos del flujo del brief (del BLOQUE 1 al 6) ya están cubiertos con la información del documento. Luego, haz SOLO la primera pregunta del primer paso que aún NO esté cubierto. Una sola pregunta.`;
+    const promptEspecial = `[DOCUMENTO ADJUNTO: ${nombre}]\n${texto}\n\nAnaliza el documento adjunto. Muestra al usuario un resumen muy breve y elegante de la información clave del brief que pudiste extraer (por ejemplo: Marca, Campaña, Objetivo, etc.) para que el usuario pueda validarla. Luego, pregúntale si es correcta o si desea corregir o agregar algún detalle antes de continuar. Haz solo una pregunta y mantén tu tono cálido.`;
     conversationHistory.push({ role: "user", parts: [{ text: promptEspecial }] });
     await llamarAPI("");
 }
@@ -721,6 +752,61 @@ async function enviar() {
     chat.appendChild(userDiv);
     input.value = '';
     input.style.height = '42px';
+
+    // Check if we are in step 1 (name/email) and user did not provide a valid email
+    if (lastAskedStep === 1) {
+        const emailMatch = text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
+        if (!emailMatch) {
+            // Store the name (which is all they provided)
+            const cleanName = text.replace(/\b(me llamo|soy|mi nombre es)\b/gi, '').trim();
+            if (cleanName) {
+                briefData.userName = cleanName;
+                briefData.userNameField = cleanName;
+            }
+            
+            // Add user message to history
+            conversationHistory.push({ role: "user", parts: [{ text: text }] });
+
+            // Show privacy message if it is the first turn
+            if (conversationHistory.length === 1) {
+                const botRow = document.createElement('div');
+                botRow.className = 'bot-row';
+                const avatar = document.createElement('img');
+                avatar.src = 'assets/MelissaIconChat.png';
+                avatar.alt = 'MELISA';
+                avatar.className = 'bot-avatar';
+                const botDiv = document.createElement('div');
+                botDiv.className = 'msg bot';
+                botDiv.innerHTML = DOMPurify.sanitize(marked.parse("🔒 **Tus datos están seguros.** Toda la información que compartas es confidencial y no se utilizará para entrenar modelos de Inteligencia Artificial externos."));
+                botRow.appendChild(avatar);
+                botRow.appendChild(botDiv);
+                chat.appendChild(botRow);
+            }
+
+            // Append bot row asking for email, but DO NOT call API
+            const botRow = document.createElement('div');
+            botRow.className = 'bot-row';
+            const avatar = document.createElement('img');
+            avatar.src = 'assets/MelissaIconChat.png';
+            avatar.alt = 'MELISA';
+            avatar.className = 'bot-avatar';
+            const botDiv = document.createElement('div');
+            botDiv.className = 'msg bot';
+            
+            const botText = `¡Hola ${briefData.userName || 'allí'}! Para poder continuar y registrar tus datos, por favor compárteme tu correo electrónico.`;
+            botDiv.innerHTML = DOMPurify.sanitize(marked.parse(botText));
+            botRow.appendChild(avatar);
+            botRow.appendChild(botDiv);
+            chat.appendChild(botRow);
+            chat.scrollTop = chat.scrollHeight;
+
+            // Push the bot response to history
+            conversationHistory.push({ role: "model", parts: [{ text: botText }] });
+            // Update progress bar
+            updateBriefProgress();
+            return;
+        }
+    }
 
     conversationHistory.push({ role: "user", parts: [{ text: text }] });
     detectUserEmail(text);       // check if user shared a MeLi email
@@ -935,8 +1021,28 @@ function renderQuickReplies(botDiv, text, detectedStep) {
                 btn.textContent = opt.label;
                 btn.onclick = () => {
                     btn.classList.toggle('selected');
+                    
+                    const isNoneOption = /ningun|none|nenhum|no se permite|no aplica/i.test(opt.value);
+                    
                     if (btn.classList.contains('selected')) {
-                        selectedValues.push(opt.value);
+                        if (isNoneOption) {
+                            // Deselect all other options in this group
+                            wrap.querySelectorAll('.qr-multi').forEach(otherBtn => {
+                                if (otherBtn !== btn) {
+                                    otherBtn.classList.remove('selected');
+                                }
+                            });
+                            selectedValues = [opt.value];
+                        } else {
+                            // Deselect any "none" options in this group
+                            wrap.querySelectorAll('.qr-multi').forEach(otherBtn => {
+                                if (/ningun|none|nenhum|no se permite|no aplica/i.test(otherBtn.textContent)) {
+                                    otherBtn.classList.remove('selected');
+                                }
+                            });
+                            selectedValues = selectedValues.filter(v => !/ningun|none|nenhum|no se permite|no aplica/i.test(v));
+                            selectedValues.push(opt.value);
+                        }
                     } else {
                         selectedValues = selectedValues.filter(v => v !== opt.value);
                     }
@@ -1005,7 +1111,7 @@ function showDownloadBubble() {
                 </li>
                 <li>
                     <span class="ns-icon">📬</span>
-                    <span><strong>Envía el brief a Trópica</strong> — lo revisaremos y te contactaremos para agendar el kick-off creativo.</span>
+                    <span><strong>Envía el brief a TRÓPICA</strong> — lo revisaremos y te contactaremos para agendar el kick-off creativo.</span>
                 </li>
                 <li>
                     <span class="ns-icon">🎨</span>
@@ -1013,7 +1119,7 @@ function showDownloadBubble() {
                 </li>
                 <li>
                     <span class="ns-icon">🚀</span>
-                    <span><strong>Producción y entrega</strong> — Trópica lidera la ejecución creativa de principio a fin.</span>
+                    <span><strong>Producción y entrega</strong> — TRÓPICA lidera la ejecución creativa de principio a fin.</span>
                 </li>
             </ol>
         </div>
