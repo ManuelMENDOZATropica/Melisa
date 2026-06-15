@@ -126,15 +126,12 @@ PASO 26 → "¿Qué formatos core de Mercado Ads se incluirán? (Puedes elegir v
   **(A)** Home Slider (display)
   **(B)** RTB Banners (display)
   **(C)** Mercado Play / Disney+ (video 6", 15", 30" — 16:9)
-  **(D)** Roku
-  **(E)** Clips (video 6", 15", 30" — 9:16)
-  **(F)** Landing page en MeLi (Mi Página)"
+  **(D)** Landing page en MeLi (Mi Página)"
 PASO 27 → "¿Qué formatos de amplificación se consideran? (Puedes elegir varios)
   **(A)** DOOH de MeLi *(solo el template oficial de MeLi)*
   **(B)** DOOH fuera de MeLi *(creatividad libre — los espacios se contratan por separado directamente con TRÓPICA)*
   **(C)** Experiencia digital interactiva fuera de MeLi *(la propuesta creativa está incluida en BrandLab; el desarrollo se cotiza por separado directamente con TRÓPICA)*
-  **(D)** BTL — ej. MeLi Arena São Paulo *(solo Brasil)*
-  **(E)** Ninguna de las anteriores"
+  **(D)** Ninguna de las anteriores"
   • IMPORTANTE: Si el usuario selecciona (B) o (C), aclara que la propuesta creativa va incluida en BrandLab pero que la contratación/desarrollo se cotiza por separado con TRÓPICA.
 PASO 28 → "¿Se incluirá Influencer Marketing o Branded Content? (Puedes elegir más de una opción)
   **(A)** Sí — ya contamos con influencers; necesito propuesta de guión *(la propuesta de guión está incluida en BrandLab; la colaboración la gestiona directamente la marca con su equipo de Branded Content)*
@@ -329,8 +326,8 @@ const STEP_KEYWORDS = [
     { step: 27, kw: ["do's y don'ts", 'dos and donts', 'qué no puede', 'restricciones de marca'] },
     { step: 28, kw: ['mecánica promocional', 'qué mecánica', 'descuento', 'cuotas sin intereses', 'envío full'] },
     { step: 28.5, kw: ['monto de inversión de marca', 'inversión de marca', 'monto de inversión'] },
-    { step: 29, kw: ['formatos core', 'home slider', 'rtb banners', 'mercado play', 'clips.*9:16'] },
-    { step: 30, kw: ['amplificación', 'dooh', 'experiencia digital interactiva', 'btl'] },
+    { step: 29, kw: ['formatos core', 'home slider', 'rtb banners', 'mercado play'] },
+    { step: 30, kw: ['amplificación', 'dooh', 'experiencia digital interactiva'] },
     { step: 30.5, kw: ['influencer marketing', 'branded content', 'influencers', 'generadores de contenido', 'propuesta de guión'] },
     { step: 31, kw: ['fecha de inicio', 'fecha de fin', 'timeline', '10 días hábiles'] },
     { step: 32, kw: ['información adicional', 'dato adicional', 'estudios de mercado', 'requisitos legales'] },
