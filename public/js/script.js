@@ -525,6 +525,153 @@ function storeBriefAnswer(text) {
     if (userEmail) briefData.userEmail = userEmail; // sync with MeLi detection
 }
 
+// ── Client-side telemetry ─────────────────────────────────────────
+// Fire-and-forget logger for failures that would otherwise leave zero
+// trace (nothing reaches /api/chat or /api/send-brief when the failure
+// happens purely in the browser). Never throws, never blocks the UI.
+function logClientEvent(event, detail, meta = {}) {
+    try {
+        fetch('/api/log-event', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ event, detail: detail ? String(detail) : '', meta }),
+        }).catch(() => { /* telemetry is best-effort */ });
+    } catch (e) { /* never let logging break the app */ }
+}
+
+// ── Autosave / Restore Draft (localStorage) ───────────────────────
+// Today NOTHING persists while a brief is being filled — conversationHistory
+// and briefData live only in JS memory. A refresh, a dropped connection, or
+// the browser discarding an inactive tab wipes 100% of the progress with no
+// way to recover it. This is the fix: autosave after every turn, offer to
+// restore on load.
+const DRAFT_KEY = 'melisa_brief_draft_v1';
+const DRAFT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 días
+
+function saveDraft() {
+    try {
+        if (!conversationHistory.length) return;
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({
+            conversationHistory,
+            briefData,
+            lastAskedStep,
+            isMeliUser,
+            userEmail,
+            savedAt: Date.now(),
+        }));
+    } catch (e) {
+        // localStorage puede fallar (modo privado, cuota llena, etc.) — no bloquea el flujo
+        console.warn('[MELISA] No se pudo guardar el borrador:', e);
+    }
+}
+
+function clearDraft() {
+    try { localStorage.removeItem(DRAFT_KEY); } catch (e) { /* no-op */ }
+}
+
+function loadDraft() {
+    try {
+        const raw = localStorage.getItem(DRAFT_KEY);
+        if (!raw) return null;
+        const draft = JSON.parse(raw);
+        if (!draft || !Array.isArray(draft.conversationHistory) || !draft.conversationHistory.length) return null;
+        if (Date.now() - (draft.savedAt || 0) > DRAFT_MAX_AGE_MS) {
+            clearDraft();
+            return null;
+        }
+        return draft;
+    } catch (e) {
+        return null;
+    }
+}
+
+/** Re-hidrata el estado global y re-pinta el chat a partir de un borrador guardado. */
+function restoreDraftIntoUI(draft) {
+    conversationHistory = draft.conversationHistory;
+    Object.assign(briefData, draft.briefData || {});
+    lastAskedStep = draft.lastAskedStep || 0;
+    isMeliUser = !!draft.isMeliUser;
+    userEmail = draft.userEmail || '';
+
+    const chat = document.getElementById('chat-window');
+    chat.innerHTML = ''; // fuera bienvenida inicial + quick-replies de idioma
+
+    for (const msg of conversationHistory) {
+        const text = msg.parts[0].text;
+        if (msg.role === 'user') {
+            const userDiv = document.createElement('div');
+            userDiv.className = 'msg user';
+            if (text.startsWith('[DOCUMENTO ADJUNTO:')) {
+                const nameMatch = text.match(/^\[DOCUMENTO ADJUNTO:\s*(.+?)\]/);
+                userDiv.innerText = `📎 ${nameMatch ? nameMatch[1] : 'Documento adjunto'}`;
+            } else {
+                userDiv.innerText = text;
+            }
+            chat.appendChild(userDiv);
+        } else {
+            const botRow = document.createElement('div');
+            botRow.className = 'bot-row';
+            const avatar = document.createElement('img');
+            avatar.src = 'assets/MelissaIconChat.png';
+            avatar.alt = 'MELISA';
+            avatar.className = 'bot-avatar';
+            const botDiv = document.createElement('div');
+            botDiv.className = 'msg bot';
+            botDiv.innerHTML = DOMPurify.sanitize(marked.parse(text));
+            botRow.appendChild(avatar);
+            botRow.appendChild(botDiv);
+            chat.appendChild(botRow);
+        }
+    }
+
+    // Aviso de que se retomó el borrador
+    const noticeRow = document.createElement('div');
+    noticeRow.className = 'bot-row';
+    const noticeAvatar = document.createElement('img');
+    noticeAvatar.src = 'assets/MelissaIconChat.png';
+    noticeAvatar.alt = 'MELISA';
+    noticeAvatar.className = 'bot-avatar';
+    const noticeDiv = document.createElement('div');
+    noticeDiv.className = 'msg bot';
+    noticeDiv.innerHTML = DOMPurify.sanitize(marked.parse('↩️ **Retomamos donde te quedaste.** Puedes seguir respondiendo desde aquí.'));
+    noticeRow.appendChild(noticeAvatar);
+    noticeRow.appendChild(noticeDiv);
+    chat.appendChild(noticeRow);
+
+    chat.scrollTop = chat.scrollHeight;
+    updateBriefProgress();
+
+    // Si el brief ya estaba completo (o casi), vuelve a mostrar el botón de descarga
+    const lastBotMsg = [...conversationHistory].reverse().find(m => m.role === 'model');
+    const closingPhrases = ["resumen final para documento", "--- resumen final", "brief completo"];
+    const wasClosedByPhrase = lastBotMsg && closingPhrases.some(t => lastBotMsg.parts[0].text.toLowerCase().includes(t));
+    if (wasClosedByPhrase || isBriefDataComplete()) {
+        showDownloadBubble();
+        downloadBubbleShown = true;
+    }
+}
+
+// ── Fallback de "brief completo" independiente de la frase de cierre ──
+// El botón de descarga hoy depende 100% de que la última respuesta de
+// Gemini contenga textualmente "resumen final para documento" / "brief
+// completo". Si el modelo no dice esa frase exacta (conversación larga,
+// se desvía del guión, streaming se corta) el botón nunca aparece y el
+// usuario llega al final sin ninguna forma de generar su documento — sin
+// error visible y sin que nada llegue al backend. Esta es la red de
+// seguridad: si ya tenemos todos los campos obligatorios del brief, se
+// muestra el botón igual.
+const REQUIRED_BRIEF_FIELDS = [
+    'campaignName', 'brand', 'businessContext', 'kpis',
+    'targetAudience', 'consumerInsight', 'differentiator',
+    'promotionalMechanics', 'brandInvestmentUSD', 'coreFormats', 'timeline',
+];
+
+function isBriefDataComplete() {
+    return REQUIRED_BRIEF_FIELDS.every(key => briefData[key] && briefData[key].trim());
+}
+
+let downloadBubbleShown = false;
+
 /**
  * Builds a structured brief text from briefData.
  * Empty fields show as "Por definir".
@@ -609,6 +756,8 @@ ${nd(briefData.additionalData)}
 }
 
 function updateBriefProgress() {
+    saveDraft(); // autoguarda tras cada turno (ver bloque "Autosave / Restore Draft")
+
     // ① Real user answers (typed messages, not internal doc-upload prompts)
     const userAnswers = conversationHistory.filter(
         m => m.role === 'user' && !m.parts[0].text.startsWith('[DOCUMENTO ADJUNTO:')
@@ -935,10 +1084,26 @@ async function llamarAPI(originalText, _retry = true) {
         // Render quick reply buttons if the message contains selectable options
         renderQuickReplies(botDiv, botFullText, detectedStep);
 
-        // Detectar brief completo e inyectar botón de descarga como burbuja en el chat
+        // Detectar brief completo e inyectar botón de descarga como burbuja en el chat.
+        // Dos caminos, para no depender 100% de que Gemini diga la frase exacta:
+        //  1) MELISA cierra con la frase esperada (camino normal).
+        //  2) Ya están todos los campos obligatorios llenos en briefData aunque el
+        //     modelo no haya dicho esa frase — red de seguridad para el caso donde
+        //     el usuario llega al final y nunca ve el botón de descarga.
         const searchTerms = ["resumen final para documento", "--- resumen final", "brief completo"];
-        if (searchTerms.some(term => botFullText.toLowerCase().includes(term))) {
+        const closedByPhrase = searchTerms.some(term => botFullText.toLowerCase().includes(term));
+        if (!downloadBubbleShown && (closedByPhrase || isBriefDataComplete())) {
             showDownloadBubble();
+            downloadBubbleShown = true;
+            if (!closedByPhrase) {
+                // Esto es justo el escenario que probablemente pasó con Cetaphil:
+                // el brief está completo pero Gemini nunca dijo la frase de cierre.
+                logClientEvent('download_bubble_fallback_triggered', null, {
+                    campaignName: briefData.campaignName,
+                    userEmail: briefData.userEmail,
+                    lastAskedStep,
+                });
+            }
         }
 
     } catch (e) {
@@ -954,6 +1119,11 @@ async function llamarAPI(originalText, _retry = true) {
         let errorTexto = String(e);
         if (e && e.message) errorTexto = e.message;
         botDiv.innerText = "⚠️ Hubo un error de conexión. Por favor intenta de nuevo.";
+        logClientEvent('api_chat_failed', errorTexto, {
+            lastAskedStep,
+            campaignName: briefData.campaignName,
+            userEmail: briefData.userEmail,
+        });
     }
 }
 
@@ -1408,18 +1578,37 @@ async function descargarBrief() {
 
         // Save locally
         doc.save('Brief_MELISA.pdf');
+        clearDraft(); // el usuario ya tiene su PDF — ya no hace falta el borrador
 
-        // Send backup copy by email (fire-and-forget)
+        // Send backup copy by email
         try {
             const pdfBase64 = doc.output('datauristring').split(',')[1];
-            sendBriefByEmail(pdfBase64);
+            await sendBriefByEmail(pdfBase64);
         } catch (mailErr) {
             console.warn('Email send failed silently:', mailErr);
+            logClientEvent('backup_email_failed', mailErr && mailErr.message, {
+                campaignName: briefData.campaignName,
+                userEmail: briefData.userEmail,
+            });
         }
 
     } catch (e) {
         console.error('Error generando PDF:', e);
+        logClientEvent('pdf_generation_failed', e && e.message, {
+            campaignName: briefData.campaignName,
+            userEmail: briefData.userEmail,
+        });
         descargarBriefSimple();
+        clearDraft(); // el usuario igual se llevó un PDF (versión simple)
+
+        // Aunque el PDF con estilo haya fallado, intentamos mandar el respaldo
+        // por correo con lo que sí tenemos — para que quede rastro server-side
+        // incluso en este camino degradado.
+        try {
+            await sendBriefByEmail(null);
+        } catch (mailErr2) {
+            console.warn('Backup email (fallback path) also failed:', mailErr2);
+        }
     }
 }
 
@@ -1447,6 +1636,9 @@ async function sendBriefByEmail(pdfBase64, isTest = false) {
     if (!res.ok) {
         const err = await res.text();
         console.warn('send-brief API error:', err);
+        // Lanzamos para que descargarBrief() pueda detectarlo y loguearlo vía
+        // logClientEvent — antes esto se tragaba el error en silencio.
+        throw new Error(`send-brief API error: ${res.status} ${err}`.substring(0, 500));
     } else {
         console.log('[MELISA] Brief email sent ✅');
     }
@@ -1846,3 +2038,21 @@ if (userInput) {
 // Send button
 const sendBtn = document.getElementById('sendBtn');
 if (sendBtn) sendBtn.addEventListener('click', () => enviar());
+
+// ── Restaurar borrador guardado (si existe) ───────────────────────
+// Ver bloque "Autosave / Restore Draft" más arriba. Corre al final para
+// que todas las funciones que usa (restoreDraftIntoUI, showDownloadBubble,
+// isBriefDataComplete) ya estén declaradas.
+(function initDraftRestore() {
+    const draft = loadDraft();
+    if (!draft) return;
+    const when = new Date(draft.savedAt).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' });
+    const wantsToContinue = window.confirm(
+        `Encontramos un brief sin terminar (guardado el ${when}).\n\n¿Quieres continuar donde lo dejaste?\n\nAceptar = continuar · Cancelar = empezar uno nuevo`
+    );
+    if (wantsToContinue) {
+        restoreDraftIntoUI(draft);
+    } else {
+        clearDraft();
+    }
+})();
