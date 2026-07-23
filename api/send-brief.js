@@ -1,21 +1,14 @@
 // CommonJS — required for Vercel Node.js runtime
-const { Resend } = require('resend');
-
-// Destinatarios deseados. ⚠️ Resend está en modo sandbox: solo permite
-// enviar a la dirección de la cuenta (manuel@tropica.me), y si CUALQUIER
-// destinatario no está permitido rechaza el envío COMPLETO con 403
-// (confirmado en logs del 23/jul con hola@tropica.me). Por eso el handler
-// tiene un fallback: si el envío a la lista completa falla por sandbox,
-// reintenta solo con manuel@. tali@ empezará a recibir automáticamente
-// cuando se verifique el dominio en resend.com/domains y se configure la
-// variable de entorno RESEND_FROM (p.ej. "MELISA <melisa@tropica.me>").
-const NOTIFY_EMAILS = ['manuel@tropica.me', 'tali@tropica.me'];
-const SANDBOX_FALLBACK_EMAILS = ['manuel@tropica.me'];
-const FROM_ADDRESS = process.env.RESEND_FROM || 'MELISA <onboarding@resend.dev>';
-
-/** True si el error de Resend es el rechazo típico del modo sandbox. */
-const isSandboxError = (error) =>
-    error && error.statusCode === 403 && /verify a domain/i.test(error.message || '');
+//
+// ✉️ ENVÍO VÍA GOOGLE APPS SCRIPT (reemplaza a Resend).
+// Resend en modo sandbox solo permitía enviar a manuel@tropica.me y exigía
+// verificar el dominio para más destinatarios. En su lugar, este endpoint
+// arma el HTML del correo y se lo pasa al MISMO webhook de Apps Script que
+// ya loguea a Google Sheets (GOOGLE_SHEETS_WEBHOOK_URL), con
+// type:"send_brief_email". El script manda el correo vía MailApp desde la
+// cuenta de Google del equipo — sin dominio verificado, sin sandbox, llega
+// a cualquier destinatario. Los destinatarios se configuran en MAIL_TO
+// dentro de google-apps-script/melisa-logger.gs (hoy: manuel@ y tali@).
 
 /** Security headers added to every response */
 const SEC_HEADERS = {
@@ -127,9 +120,9 @@ module.exports = async function handler(req, res) {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    const apiKey = process.env.RESEND_API_KEY;
-    if (!apiKey) {
-        return res.status(500).json({ error: 'RESEND_API_KEY not configured' });
+    const webhookUrl = process.env.GOOGLE_SHEETS_WEBHOOK_URL;
+    if (!webhookUrl) {
+        return res.status(500).json({ error: 'GOOGLE_SHEETS_WEBHOOK_URL not configured' });
     }
 
     try {
@@ -140,9 +133,7 @@ module.exports = async function handler(req, res) {
             return res.status(413).json({ error: 'PDF attachment too large' });
         }
 
-        const resend = new Resend(apiKey);
-
-        // FIX 422 Resend ("The `\n` is not allowed in the `subject` field"):
+        // FIX 422 ("The `\n` is not allowed in the `subject` field"):
         // el campaignName puede llegar contaminado con saltos de l\u00EDnea (pas\u00F3 en
         // producci\u00F3n el 23/jul). Todo lo que va a subject/filename se aplana a
         // una sola l\u00EDnea y se recorta.
@@ -156,10 +147,7 @@ module.exports = async function handler(req, res) {
             .replace(/[^a-zA-Z0-9 _-]/g, '')
             .trim().replace(/\s+/g, '_').substring(0, 40);
         const nameParts = ['Brief', fileSlug(brandName), fileSlug(campaignName)].filter(Boolean);
-        const attachments = pdfBase64 ? [{
-            filename: nameParts.join('_') + (isTest ? '_TEST' : '') + '.pdf',
-            content: pdfBase64,
-        }] : [];
+        const pdfFilename = nameParts.join('_') + (isTest ? '_TEST' : '') + '.pdf';
 
         // Subject
         const subject = isTest
@@ -168,29 +156,32 @@ module.exports = async function handler(req, res) {
                (campaignName ? ': ' + campaignName : '') +
                (brandName    ? ' \u00B7 ' + brandName : ''));
 
-        const emailPayload = {
-            from: FROM_ADDRESS,
-            to:   NOTIFY_EMAILS,
-            subject,
-            html: buildEmailHtml(briefData, isMeliUser, isTest),
-            attachments,
-        };
+        // Envía vía el webhook de Apps Script (MailApp) — ver nota al inicio.
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30_000);
+        const gasRes = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                type: 'send_brief_email',
+                subject,
+                html: buildEmailHtml(briefData, isMeliUser, isTest),
+                pdfBase64: pdfBase64 || null,
+                pdfFilename,
+            }),
+            signal: controller.signal,
+        });
+        clearTimeout(timeout);
 
-        let { data, error } = await resend.emails.send(emailPayload);
+        let gasBody = {};
+        try { gasBody = await gasRes.json(); } catch (e) { /* respuesta no-JSON */ }
 
-        // Fallback sandbox: si la lista completa fue rechazada, reintenta
-        // solo con la dirección de la cuenta para no perder el respaldo.
-        if (isSandboxError(error)) {
-            console.warn('Resend sandbox: reintentando solo con', SANDBOX_FALLBACK_EMAILS);
-            ({ data, error } = await resend.emails.send({ ...emailPayload, to: SANDBOX_FALLBACK_EMAILS }));
+        if (!gasRes.ok || gasBody.ok === false) {
+            console.error('Apps Script mail error:', gasRes.status, gasBody);
+            return res.status(502).json({ error: gasBody.error || ('Apps Script HTTP ' + gasRes.status) });
         }
 
-        if (error) {
-            console.error('Resend error:', error);
-            return res.status(400).json({ error });
-        }
-
-        return res.status(200).json({ success: true, id: data && data.id });
+        return res.status(200).json({ success: true, via: 'apps-script' });
 
     } catch (err) {
         console.error('send-brief error:', err);

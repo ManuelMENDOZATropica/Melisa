@@ -57,22 +57,67 @@ const LOG_SHEET_PREFIX = 'Logs_';
 const SESSIONS_SHEET_NAME = 'MELISA_Sesiones';
 const TIMEZONE = 'America/Mexico_City';
 
+// Destinatarios de los correos (brief completado y alertas de error).
+// A diferencia de Resend, MailApp manda desde TU cuenta de Google — sin
+// verificación de dominio ni modo sandbox: llega a cualquier dirección.
+const MAIL_TO = ['manuel@tropica.me', 'tali@tropica.me'];
+
 function doPost(e) {
     try {
         const data = JSON.parse(e.postData.contents);
         const meta = data.meta || {};
 
+        // ── Modo correo: Vercel pide mandar un email ──────────────────
+        // (api/send-brief.js manda type:"send_brief_email"; las alertas
+        //  críticas de api/log-event.js llegan como type:"send_alert_email")
+        if (data.type === 'send_brief_email') {
+            sendBriefEmail_(data);
+            return jsonResponse_({ ok: true, sent: true });
+        }
+        if (data.type === 'send_alert_email') {
+            sendAlertEmail_(data);
+            return jsonResponse_({ ok: true, sent: true });
+        }
+
+        // ── Modo log (default): registrar el evento en el spreadsheet ─
         appendLogRow_(data, meta);
         upsertSessionRow_(data, meta);
 
-        return ContentService
-            .createTextOutput(JSON.stringify({ ok: true }))
-            .setMimeType(ContentService.MimeType.JSON);
+        return jsonResponse_({ ok: true });
     } catch (err) {
-        return ContentService
-            .createTextOutput(JSON.stringify({ ok: false, error: String(err) }))
-            .setMimeType(ContentService.MimeType.JSON);
+        return jsonResponse_({ ok: false, error: String(err) });
     }
+}
+
+function jsonResponse_(obj) {
+    return ContentService
+        .createTextOutput(JSON.stringify(obj))
+        .setMimeType(ContentService.MimeType.JSON);
+}
+
+/** Correo del brief completado, con el PDF adjunto (viene en base64). */
+function sendBriefEmail_(data) {
+    const options = { htmlBody: data.html || '' };
+    if (data.pdfBase64) {
+        options.attachments = [
+            Utilities.newBlob(
+                Utilities.base64Decode(data.pdfBase64),
+                'application/pdf',
+                data.pdfFilename || 'Brief_MELISA.pdf'
+            ),
+        ];
+    }
+    MailApp.sendEmail(MAIL_TO.join(','), data.subject || '📄 Nuevo brief MELISA', '', options);
+}
+
+/** Alerta de error crítico del cliente (pdf_generation_failed, etc.). */
+function sendAlertEmail_(data) {
+    MailApp.sendEmail(
+        MAIL_TO.join(','),
+        data.subject || '⚠️ MELISA — alerta',
+        '',
+        { htmlBody: data.html || '' }
+    );
 }
 
 /** Agrega una fila cruda por cada evento — el historial completo, turno a turno. */

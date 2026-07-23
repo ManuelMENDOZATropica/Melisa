@@ -13,19 +13,10 @@
 // prefix), forwarded to a Google Sheet for a permanent, browsable record of
 // EVERY conversation (completed or abandoned — see forwardToGoogleSheets()
 // and google-apps-script/melisa-logger.gs), and events considered critical
-// also trigger a real-time email alert via Resend.
-const { Resend } = require('resend');
-
-// ⚠️ Resend sandbox: solo permite enviar a manuel@tropica.me — si algún
-// destinatario no está permitido, rechaza el envío completo, por eso el
-// fallback (ver nota completa en api/send-brief.js). tali@ recibirá
-// automáticamente al verificar el dominio y configurar RESEND_FROM.
-const NOTIFY_EMAILS = ['manuel@tropica.me', 'tali@tropica.me'];
-const SANDBOX_FALLBACK_EMAILS = ['manuel@tropica.me'];
-const FROM_ADDRESS = process.env.RESEND_FROM || 'MELISA Alertas <onboarding@resend.dev>';
-
-const isSandboxError = (error) =>
-    error && error.statusCode === 403 && /verify a domain/i.test(error.message || '');
+// also trigger a real-time email alert (via the same Apps Script webhook).
+// ✉️ Las alertas también van vía Google Apps Script / MailApp (reemplaza a
+// Resend — ver nota completa en api/send-brief.js). Los destinatarios se
+// configuran en MAIL_TO dentro de google-apps-script/melisa-logger.gs.
 
 /** Events serious enough to warrant an immediate email alert. */
 const CRITICAL_EVENTS = new Set([
@@ -115,12 +106,10 @@ module.exports = async function handler(req, res) {
         // Sheets — no bloquea ni depende de que esto funcione para responder.
         await forwardToGoogleSheets({ event, detail: safeDetail, meta: safeMeta, userAgent, ts });
 
-        if (CRITICAL_EVENTS.has(event) && process.env.RESEND_API_KEY) {
+        if (CRITICAL_EVENTS.has(event) && process.env.GOOGLE_SHEETS_WEBHOOK_URL) {
             try {
-                const resend = new Resend(process.env.RESEND_API_KEY);
-                const alertPayload = {
-                    from: FROM_ADDRESS,
-                    to: NOTIFY_EMAILS,
+                await forwardToGoogleSheets({
+                    type: 'send_alert_email',
                     subject: `⚠️ MELISA — ${event}`,
                     html: `
                         <p><strong>Evento:</strong> ${event}</p>
@@ -129,11 +118,7 @@ module.exports = async function handler(req, res) {
                         <p><strong>User-Agent:</strong> ${req.headers['user-agent'] || '—'}</p>
                         <p><strong>Fecha:</strong> ${new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })}</p>
                     `,
-                };
-                const { error } = await resend.emails.send(alertPayload);
-                if (isSandboxError(error)) {
-                    await resend.emails.send({ ...alertPayload, to: SANDBOX_FALLBACK_EMAILS });
-                }
+                });
             } catch (mailErr) {
                 // Don't fail the request just because the alert email failed —
                 // the console.error above already preserved the event.
