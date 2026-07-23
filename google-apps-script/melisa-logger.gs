@@ -110,6 +110,25 @@ function sendBriefEmail_(data) {
     MailApp.sendEmail(MAIL_TO.join(','), data.subject || '📄 Nuevo brief MELISA', '', options);
 }
 
+/**
+ * 🧪 EJECUTA ESTA FUNCIÓN UNA VEZ desde el editor para autorizar el permiso
+ * de correo: selecciona "testEmail" en el menú desplegable de funciones
+ * (arriba, junto a "Depurar") y haz clic en ▶️ Ejecutar. Google mostrará
+ * "Revisar permisos" → tu cuenta → "Configuración avanzada" → "Ir a
+ * [nombre del proyecto] (no seguro)" → Permitir. Es tu propio script; el
+ * aviso de "no seguro" es estándar para scripts personales sin verificar.
+ * Si todo sale bien, te llega un correo de prueba a MAIL_TO.
+ */
+function testEmail() {
+    MailApp.sendEmail(
+        MAIL_TO.join(','),
+        '🧪 MELISA — prueba de correo vía Apps Script',
+        '',
+        { htmlBody: '<p>Si estás leyendo esto, el permiso de correo quedó autorizado y MELISA ya puede enviar briefs y alertas. 🌴✨</p>' }
+    );
+    Logger.log('Correo de prueba enviado a: ' + MAIL_TO.join(', '));
+}
+
 /** Alerta de error crítico del cliente (pdf_generation_failed, etc.). */
 function sendAlertEmail_(data) {
     MailApp.sendEmail(
