@@ -16,7 +16,9 @@
 // also trigger a real-time email alert via Resend.
 const { Resend } = require('resend');
 
-const NOTIFY_EMAILS = ['hola@tropica.me'];
+// ⚠️ Resend sandbox: solo permite enviar a manuel@tropica.me (ver nota en
+// api/send-brief.js). Revertir a hola@tropica.me al verificar el dominio.
+const NOTIFY_EMAILS = ['manuel@tropica.me'];
 
 /** Events serious enough to warrant an immediate email alert. */
 const CRITICAL_EVENTS = new Set([

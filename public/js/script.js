@@ -208,6 +208,7 @@ Estructura obligatoria del documento:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 - NUNCA MENCIONES LOS NÚMEROS DE PASO (ej. "Paso 17", "Paso 18"). Mantén la conversación fluida y natural.
 - UNA SOLA PREGUNTA POR TURNO. Nunca hagas dos preguntas juntas.
+- BRIEF COMPLETO OBLIGATORIO: NO generes el RESUMEN FINAL mientras quede algún dato del flujo sin responder — ni por el usuario ni por un documento adjunto. Si un documento cubrió solo parte de la información, continúa preguntando por TODO lo que falte antes de cerrar. Si recibes una NOTA INTERNA del sistema con datos faltantes, obedécela: pregunta por esos datos uno por turno y no cierres hasta cubrirlos.
 - VERIFICACIÓN DE RESPUESTA COMPLETA: Si el usuario responde de forma muy breve o incompleta a una pregunta que pide múltiples detalles (por ejemplo, si da solo un objetivo pero no los demás), NO pases a la siguiente pregunta. Pregunta si desea agregar algo más o pídele amablemente la parte que falta. Solo avanza cuando la respuesta cubra todos los puntos o el usuario indique que no tiene más que agregar.
 - Si el usuario adjunta un documento, analízalo y SALTA los pasos cubiertos.
 - Si el usuario no sabe algo, sugiere opciones razonables y sigue.
@@ -666,6 +667,8 @@ function restoreDraftIntoUI(draft) {
     for (const msg of conversationHistory) {
         const text = msg.parts[0].text;
         if (msg.role === 'user') {
+            // Las notas internas del sistema nunca se muestran (el usuario no las escribió)
+            if (text.startsWith(INTERNAL_NOTE_PREFIX)) continue;
             const userDiv = document.createElement('div');
             userDiv.className = 'msg user';
             if (text.startsWith('[DOCUMENTO ADJUNTO:')) {
@@ -733,11 +736,40 @@ const REQUIRED_BRIEF_FIELDS = [
     'promotionalMechanics', 'brandInvestmentUSD', 'coreFormats', 'timeline',
 ];
 
+/** Etiquetas legibles para armar la nota interna que le decimos a MELISA. */
+const FIELD_LABELS = {
+    campaignName:         'Nombre del proyecto o campaña',
+    brand:                'Marca',
+    businessContext:      'Contexto del negocio (El Reto)',
+    kpis:                 'Métricas clave de éxito (KPIs)',
+    targetAudience:       'Audiencia objetivo',
+    consumerInsight:      'Key Consumer Insight',
+    differentiator:       'Diferenciador frente a la competencia',
+    promotionalMechanics: 'Mecánicas promocionales',
+    brandInvestmentUSD:   'Monto de inversión de marca (USD)',
+    coreFormats:          'Formatos core de Mercado Ads',
+    timeline:             'Fechas de inicio y fin (Timeline)',
+};
+
+function getMissingBriefFields() {
+    return REQUIRED_BRIEF_FIELDS.filter(key => !(briefData[key] && briefData[key].trim()));
+}
+
 function isBriefDataComplete() {
-    return REQUIRED_BRIEF_FIELDS.every(key => briefData[key] && briefData[key].trim());
+    return getMissingBriefFields().length === 0;
 }
 
 let downloadBubbleShown = false;
+
+// Contador de "empujones" — cada vez que MELISA intenta cerrar el brief con
+// campos aún vacíos, le inyectamos una nota interna para que siga preguntando.
+// El tope evita un loop infinito si el modelo insiste en cerrar o si algún
+// campo nunca se logra capturar (p.ej. por fallo de detección de paso).
+let completionNudgesSent = 0;
+const MAX_COMPLETION_NUDGES = 6;
+
+/** Prefijo de mensajes internos que el usuario nunca escribió ni debe ver. */
+const INTERNAL_NOTE_PREFIX = '[NOTA INTERNA';
 
 /**
  * Builds a structured brief text from briefData.
@@ -825,9 +857,12 @@ ${nd(briefData.additionalData)}
 function updateBriefProgress() {
     saveDraft(); // autoguarda tras cada turno (ver bloque "Autosave / Restore Draft")
 
-    // ① Real user answers (typed messages, not internal doc-upload prompts)
+    // ① Real user answers (typed messages — excludes doc-upload prompts and
+    //    internal system notes the user never wrote)
     const userAnswers = conversationHistory.filter(
-        m => m.role === 'user' && !m.parts[0].text.startsWith('[DOCUMENTO ADJUNTO:')
+        m => m.role === 'user'
+            && !m.parts[0].text.startsWith('[DOCUMENTO ADJUNTO:')
+            && !m.parts[0].text.startsWith(INTERNAL_NOTE_PREFIX)
     ).length;
 
     // ② Steps covered by uploaded PDFs: for each doc-upload prompt find the
@@ -1287,6 +1322,32 @@ async function llamarAPI(originalText, _retry = true) {
         //     el usuario llega al final y nunca ve el botón de descarga.
         const searchTerms = ["resumen final para documento", "--- resumen final", "brief completo"];
         const closedByPhrase = searchTerms.some(term => botFullText.toLowerCase().includes(term));
+
+        // ── Insistencia en campos faltantes ──────────────────────────
+        // Requisito: el brief DEBE quedar completo, venga la info de la
+        // conversación o de un documento. Si MELISA intenta cerrar con el
+        // resumen final pero briefData aún tiene campos obligatorios vacíos,
+        // no la dejamos cerrar: le inyectamos una nota interna (que el usuario
+        // no ve) con la lista exacta de lo que falta, y MELISA sigue
+        // preguntando uno por uno.
+        if (closedByPhrase && !isBriefDataComplete() && completionNudgesSent < MAX_COMPLETION_NUDGES) {
+            completionNudgesSent++;
+            const missingLabels = getMissingBriefFields().map(f => FIELD_LABELS[f] || f);
+            logClientEvent('completion_nudge_sent', null, {
+                nudge: completionNudgesSent,
+                missing: missingLabels.join(' | '),
+                campaignName: briefData.campaignName,
+            });
+            conversationHistory.push({
+                role: 'user',
+                parts: [{
+                    text: `${INTERNAL_NOTE_PREFIX} DEL SISTEMA — el usuario NO ve este mensaje ni lo escribió él]\nAún faltan estos datos obligatorios del brief:\n${missingLabels.map(l => `- ${l}`).join('\n')}\n\nNO generes el resumen final todavía. Discúlpate brevemente por el detalle pendiente y pregunta por el PRIMER dato faltante de la lista, usando la redacción original de la pregunta correspondiente del flujo. Una sola pregunta. Continúa con los demás datos faltantes en los siguientes turnos antes de generar el resumen final.`,
+                }],
+            });
+            await llamarAPI('');
+            return;
+        }
+
         if (!downloadBubbleShown && (closedByPhrase || isBriefDataComplete())) {
             showDownloadBubble();
             downloadBubbleShown = true;

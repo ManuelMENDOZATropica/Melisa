@@ -1,7 +1,12 @@
 // CommonJS — required for Vercel Node.js runtime
 const { Resend } = require('resend');
 
-const NOTIFY_EMAILS = ['hola@tropica.me'];
+// ⚠️ Resend está en modo sandbox: solo permite enviar a la dirección de la
+// cuenta (manuel@tropica.me). Los envíos a hola@tropica.me rebotaban con 403
+// (confirmado en logs del 23/jul). Cuando se verifique el dominio tropica.me
+// en resend.com/domains Y se cambie el `from` a ese dominio, volver a
+// ['hola@tropica.me'] o a la lista que se quiera.
+const NOTIFY_EMAILS = ['manuel@tropica.me'];
 
 /** Security headers added to every response */
 const SEC_HEADERS = {
