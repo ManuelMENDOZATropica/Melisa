@@ -303,13 +303,9 @@ PASO 18-MELI → Pregunta: "¿Cuál es el monto del media plan para esta campañ
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 // ── Brief Progress Tracker ──────────────────────────────────────
-// Progress = max(userAnswers, stepReachedViaDoc) / TOTAL_STEPS
-//  · userAnswers  = real messages sent by the user (no doc-upload prompts)
-//  · stepReachedViaDoc = when a PDF covers questions, the bot jumps ahead;
-//    we detect which step it jumped TO by scanning the bot reply that
-//    immediately follows each [DOCUMENTO ADJUNTO:] prompt.
-//    Steps BEFORE that jump = covered by the document.
-const TOTAL_STEPS = 30; // 23 original + 1 (PASO 18bis: uso de IA)
+// El progreso se calcula en updateBriefProgress() como campos capturados /
+// campos totales de briefData (fuente de verdad: BRIEF_STATE). El estimado
+// viejo por conteo de mensajes/saltos de documento daba 100% falsos.
 
 // ═══════════════════════════════════════════════════════════════════
 // TODO — REDISEÑO PENDIENTE (confirmado con logs reales, sesión NYX/Pride
@@ -941,46 +937,28 @@ ${nd(briefData.additionalData)}
 function updateBriefProgress() {
     saveDraft(); // autoguarda tras cada turno (ver bloque "Autosave / Restore Draft")
 
-    // ① Real user answers (typed messages — excludes doc-upload prompts and
-    //    internal system notes the user never wrote)
-    const userAnswers = conversationHistory.filter(
-        m => m.role === 'user'
-            && !m.parts[0].text.startsWith('[DOCUMENTO ADJUNTO:')
-            && !m.parts[0].text.startsWith(INTERNAL_NOTE_PREFIX)
-    ).length;
+    // ── Progreso REAL basado en briefData ─────────────────────────────
+    // Antes se ESTIMABA: contando mensajes del usuario y "adivinando" cuántos
+    // pasos saltó un documento adjunto vía palabras clave en la respuesta del
+    // bot. Dos bugs confirmados (23/jul): el resumen que MELISA hace de un
+    // documento menciona términos de pasos altos (fechas, influencers...) →
+    // el detector creía que se saltó al paso ~31 → 100% con la conversación
+    // recién empezando. Y la frase casual "brief completo" en cualquier
+    // mensaje también marcaba 100%.
+    // Ahora que briefData es confiable (BRIEF_STATE en cada turno), el
+    // progreso es simplemente: campos capturados / campos totales del brief.
+    const fields = Object.keys(briefData).filter(k =>
+        k !== 'userName'                        // alias de userNameField
+        && (k !== 'mediaPlanUSD' || isMeliUser) // solo aplica a usuarios MeLi
+    );
+    const filled = fields.filter(k => briefData[k] && briefData[k].trim()).length;
 
-    // ② Steps covered by uploaded PDFs: for each doc-upload prompt find the
-    //    very next bot reply and detect which step the bot jumped TO.
-    //    Everything BEFORE that step was covered by the document.
-    let docCoveredSteps = 0;
-    for (let i = 0; i < conversationHistory.length; i++) {
-        const msg = conversationHistory[i];
-        if (msg.role === 'user' && msg.parts[0].text.startsWith('[DOCUMENTO ADJUNTO:')) {
-            // Find the next model reply after this doc upload
-            const nextBot = conversationHistory.slice(i + 1).find(m => m.role === 'model');
-            if (nextBot) {
-                const jumpedToStep = detectStepInText(nextBot.parts[0].text);
-                if (jumpedToStep > 1) {
-                    // Steps 1 … (jumpedToStep-1) were covered by the document
-                    docCoveredSteps = Math.max(docCoveredSteps, jumpedToStep - 1);
-                }
-            }
-        }
-    }
-
-    // ③ Check if the brief is fully complete
-    const allBotText = conversationHistory
-        .filter(m => m.role === 'model')
-        .map(m => m.parts[0].text)
-        .join(' ')
-        .toLowerCase();
-    const isComplete = allBotText.includes('resumen final para documento') ||
-        allBotText.includes('brief completo');
-
-    // Take the higher of typed answers vs. doc-covered steps
-    const answered = isComplete ? TOTAL_STEPS
-        : Math.min(Math.max(userAnswers, docCoveredSteps + userAnswers), TOTAL_STEPS);
-    const pct = isComplete ? 100 : Math.round((answered / TOTAL_STEPS) * 100);
+    // 100% únicamente cuando MELISA emitió el resumen final de verdad
+    // (marcador exacto) o cuando no queda ningún campo por llenar.
+    const closedFinal = conversationHistory.some(m => m.role === 'model' &&
+        m.parts[0].text.toLowerCase().includes('resumen final para documento'));
+    const isComplete = closedFinal || filled === fields.length;
+    const pct = isComplete ? 100 : Math.min(Math.round((filled / fields.length) * 100), 99);
 
     const fillEl = document.getElementById('brief-progress-fill');
     const pctEl = document.getElementById('brief-progress-pct');
