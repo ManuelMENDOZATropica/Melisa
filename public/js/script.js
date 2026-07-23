@@ -294,6 +294,38 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
 //    Steps BEFORE that jump = covered by the document.
 const TOTAL_STEPS = 30; // 23 original + 1 (PASO 18bis: uso de IA)
 
+// ═══════════════════════════════════════════════════════════════════
+// TODO — REDISEÑO PENDIENTE (confirmado con logs reales, sesión NYX/Pride
+// del 23/jul/2026): detectStepInText() + STEP_KEYWORDS + STEP_TO_FIELD es
+// un sistema frágil de raíz. Dos fallas confirmadas:
+//
+//  1. Solo captura respuestas ESCRITAS a preguntas reconocidas por palabra
+//     clave. Si el usuario sube un documento y MELISA extrae/confirma datos
+//     en prosa (ver extractStructuredFieldsFromDoc() más abajo — parche
+//     puntual, NO solución general), esa info nunca entra a briefData salvo
+//     que además coincida con el formato específico de la plantilla.
+//  2. Palabras clave cortas ('awareness', 'performance', etc.) matchean
+//     aunque aparezcan como OPCIÓN de respuesta de otra pregunta, no como
+//     la pregunta en sí — causó que "(A) Lanzamiento de producto" (paso 8,
+//     tipo de campaña) se guardara como paso 14 (objetivo principal) porque
+//     el mensaje del bot mencionaba "Awareness de marca" como opción (C).
+//
+// SOLUCIÓN PROPUESTA (no implementada aún — requiere pruebas antes de
+// confiarla en producción):
+//   Modificar SYSTEM_PROMPT para que, además de la respuesta conversacional,
+//   MELISA devuelva en cada turno un bloque oculto tipo:
+//     <!--BRIEF_STATE:{"campaignName":"...", "brand":"...", ...}-->
+//   con TODO lo que sabe hasta ese momento (venga del chat o de un
+//   documento). El cliente parsea y quita ese bloque antes de mostrarlo
+//   (regex simple), y lo usa como fuente de verdad para briefData —
+//   reemplazando lastAskedStep/STEP_KEYWORDS/STEP_TO_FIELD/storeBriefAnswer
+//   por completo. Gemini tiene el contexto completo de la conversación, así
+//   que no depende de que la pregunta se haya frazeado "como se esperaba".
+//   Riesgo: cambia el comportamiento del modelo en producción — probar bien
+//   (que no rompa el streaming, que el bloque nunca se le muestre al
+//   usuario, que el JSON parseé aunque el modelo lo mande imperfecto).
+// ═══════════════════════════════════════════════════════════════════
+
 // Keyword map: step number → phrases the bot uses when asking THAT question.
 // Used ONLY to detect doc-skip jumps (not for regular message counting).
 const STEP_KEYWORDS = [
@@ -851,6 +883,65 @@ function createLoadingDots() {
     return `<div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>`;
 }
 
+// ── Extracción directa de campos desde el documento adjunto ───────
+// PROBLEMA REAL detectado con logs: cuando el usuario sube un brief de
+// referencia, MELISA lo lee y lo confirma perfecto EN EL CHAT (texto libre),
+// pero esa info nunca llegaba a briefData — porque briefData solo se llena
+// cuando el usuario escribe una respuesta nueva a una pregunta detectada por
+// palabra clave (ver storeBriefAnswer). enviarDocTexto() nunca llama a
+// storeBriefAnswer(), así que todo lo que MELISA "entendió" del documento se
+// perdía a la hora de generar el PDF (quedaba como "Por definir").
+//
+// Este es un parche dirigido al formato de la plantilla de TRÓPICA/Mercado
+// Ads ("PROJECT NAME  ...  BRAND  ...  PROJECT LEAD @ MELI  ...  PROJECT LEAD
+// @ BRAND  ..."), que es el documento que la gente de MeLi/TRÓPICA sube en la
+// práctica. No es un parser genérico — si el documento no sigue este formato
+// exacto, simplemente no encuentra nada y no pasa nada malo (best-effort).
+//
+// Pendiente a futuro (más robusto): que MELISA misma devuelva un bloque de
+// datos estructurados en cada respuesta, para no depender de ningún formato
+// de documento ni de la detección de pasos por palabra clave.
+function extractStructuredFieldsFromDoc(text) {
+    /** Devuelve el texto entre el final de `afterLabel` y el inicio de `beforeLabel`. */
+    const grab = (afterLabel, beforeLabel) => {
+        const afterMatch = afterLabel.exec(text);
+        if (!afterMatch) return '';
+        const start = afterMatch.index + afterMatch[0].length;
+        let end = text.length;
+        if (beforeLabel) {
+            const rest = text.slice(start);
+            const beforeMatch = beforeLabel.exec(rest);
+            if (beforeMatch) end = start + beforeMatch.index;
+        }
+        return text.slice(start, end).replace(/\s{2,}/g, ' ').trim();
+    };
+
+    const found = {};
+
+    const projectName = grab(/PROJECT NAME\s+/i, /\bBRAND\s+/i);
+    if (projectName) found.campaignName = projectName;
+
+    const brand = grab(/\bBRAND\s+/i, /PROJECT LEAD\s*@\s*MELI/i);
+    if (brand) found.brand = brand;
+
+    const leadMeli = grab(/PROJECT LEAD\s*@\s*MELI\s+/i, /PROJECT LEAD\s*@\s*BRAND/i);
+    if (leadMeli) found.projectLeadMeli = leadMeli;
+
+    // "PROJECT LEAD @ BRAND" no tiene una tercera etiqueta conocida que marque
+    // dónde termina (el extractor de PDF junta todo con espacios, sin saltos
+    // de línea reales dentro de una página). Como es un nombre de persona,
+    // nos quedamos solo con las primeras 2 palabras después de la etiqueta
+    // (probado contra el brief real de NYX: da "LUISA ARANA" exacto). Nombres
+    // con más de 2 palabras (doble apellido, por ejemplo) van a salir cortados
+    // — mejor eso que arrastrar el título de la siguiente sección.
+    const leadBrandRaw = grab(/PROJECT LEAD\s*@\s*BRAND\s+/i, null);
+    if (leadBrandRaw) {
+        found.projectLeadBrand = leadBrandRaw.split(/\s+/).slice(0, 2).join(' ').trim();
+    }
+
+    return found;
+}
+
 async function handleFileUpload(input) {
     const file = input.files[0];
     if (!file) return;
@@ -878,6 +969,25 @@ async function handleFileUpload(input) {
         }
 
         if (extractedText) {
+            // Carga directa a briefData ANTES de mandarlo a Gemini — esto es lo
+            // que evita que la info del documento se pierda (ver comentario en
+            // extractStructuredFieldsFromDoc). Solo llena campos vacíos; nunca
+            // pisa algo que el usuario ya haya contestado a mano.
+            const extractedFields = extractStructuredFieldsFromDoc(extractedText);
+            let fieldsFilled = 0;
+            for (const [field, value] of Object.entries(extractedFields)) {
+                if (value && !(briefData[field] && briefData[field].trim())) {
+                    briefData[field] = value;
+                    fieldsFilled++;
+                }
+            }
+            if (fieldsFilled > 0) {
+                logClientEvent('doc_fields_extracted', null, {
+                    fields: Object.keys(extractedFields).join(', '),
+                    fieldsFilled,
+                });
+            }
+
             statusDiv.innerHTML = `✅ Documento <b>"${safeName}"</b> analizado. MELISA le está sacando el jugo... ${createLoadingDots()}`;
             await enviarDocTexto(extractedText, safeName);
         }
