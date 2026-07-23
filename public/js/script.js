@@ -220,6 +220,22 @@ Estructura obligatoria del documento:
 - NO repitas lo que el usuario acaba de decir.
 - El DOCUMENTO FINAL es la ÚNICA excepción a la brevedad.
 - NOMBRE DE LA EMPRESA: Siempre que te refieras a la empresa o marca "Trópica" en cualquiera de tus respuestas, debes escribir obligatoriamente TRÓPICA (en mayúsculas y con tilde en la O). Nunca utilices minúsculas como "Trópica" o "tropica".
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🧾 ESTADO ESTRUCTURADO DEL BRIEF — OBLIGATORIO EN CADA RESPUESTA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Al FINAL de CADA una de tus respuestas (sin excepción), agrega una última línea con este formato EXACTO:
+
+[BRIEF_STATE]{"campo1":"valor1","campo2":"valor2"}
+
+Reglas de esta línea:
+- JSON válido en UNA sola línea. Incluye SOLO los campos que ya conoces con certeza, vengan de las respuestas del usuario O de un documento adjunto que hayas analizado.
+- Claves permitidas (usa exactamente estos nombres): userNameField, userEmail, campaignName, brand, projectLeadMeli, projectLeadBrand, campaignType, markets, businessContext, challengeTweet, kpis, objectiveFocus, objectiveMain, heroProducts, targetAudience, consumerInsight, competition, differentiator, creativeConceptStatus, tagline, keyMessage, emotionalTerritory, previousCampaigns, aiUsage, referenceFiles, dosAndDonts, promotionalMechanics, brandInvestmentUSD, coreFormats, amplification, brandedContent, timeline, additionalData, mediaPlanUSD
+- Valores: strings fieles a lo que dijo el usuario o el documento (resume solo si supera ~300 caracteres). Sin saltos de línea dentro de los valores.
+- NO incluyas campos que aún no conoces. NO uses "Por definir" ni valores vacíos.
+- Las confirmaciones del usuario ("sí", "es correcto") NO son valores — el valor es el dato confirmado.
+- El usuario NUNCA ve esta línea; el sistema la procesa y la oculta. No la menciones ni la expliques.
+- NUNCA la omitas, ni siquiera en el mensaje del RESUMEN FINAL.
 `;
 
 let conversationHistory = [];
@@ -519,6 +535,53 @@ const STEP_TO_FIELD = {
     98:   'mediaPlanUSD',
 };
 
+// ── BRIEF_STATE: estado estructurado emitido por MELISA ───────────
+// Rediseño robusto (el TODO de arriba, ya implementado): el SYSTEM_PROMPT
+// instruye a MELISA a terminar CADA respuesta con una línea
+//   [BRIEF_STATE]{"campaignName":"...","brand":"...", ...}
+// con todo lo que sabe hasta ese turno — venga del chat O de un documento
+// adjunto. El cliente la parsea, la oculta del render, y la usa como fuente
+// de verdad para briefData. Una vez que el estado empieza a llegar, el
+// guardado frágil por palabra clave (storeBriefAnswer) se desactiva solo.
+const BRIEF_STATE_MARKER = '[BRIEF_STATE]';
+let briefStateActive = false;
+
+/** Quita la línea de estado del texto que se le muestra al usuario.
+ *  Funciona también con estado parcial a mitad de streaming. */
+function stripBriefState(text) {
+    const idx = text.indexOf(BRIEF_STATE_MARKER);
+    return idx === -1 ? text : text.slice(0, idx).trimEnd();
+}
+
+/** Parsea el BRIEF_STATE de la respuesta completa y lo vuelca a briefData.
+ *  Valores no vacíos del estado SOBREESCRIBEN lo local (el modelo tiene el
+ *  contexto completo; lo local puede estar contaminado por el sistema viejo
+ *  de palabras clave). Devuelve true si aplicó algo. */
+function applyBriefState(fullText) {
+    const idx = fullText.indexOf(BRIEF_STATE_MARKER);
+    if (idx === -1) return false;
+    const jsonPart = fullText.slice(idx + BRIEF_STATE_MARKER.length).trim();
+    const match = jsonPart.match(/\{[\s\S]*\}/);
+    if (!match) return false;
+    try {
+        const state = JSON.parse(match[0]);
+        let applied = 0;
+        for (const [key, value] of Object.entries(state)) {
+            if (!(key in briefData)) continue;          // solo claves conocidas
+            if (typeof value !== 'string' || !value.trim()) continue; // nunca borra con vacío
+            briefData[key] = value.trim().substring(0, 2000);
+            applied++;
+        }
+        if (applied > 0) briefStateActive = true;
+        return applied > 0;
+    } catch (e) {
+        logClientEvent('brief_state_parse_failed', e && e.message, {
+            snippet: jsonPart.substring(0, 200),
+        });
+        return false;
+    }
+}
+
 /** Tracks which step the bot last asked, so next user reply can be stored. */
 let lastAskedStep = 0;
 
@@ -526,7 +589,28 @@ let lastAskedStep = 0;
  * Stores the current user answer under the correct briefData field,
  * based on which step the bot last asked about.
  */
+/**
+ * Confirmaciones cortas tipo "si", "es correcto", "ok" — NO son datos del
+ * brief. Bug real (23/jul, sesión Clip): MELISA preguntó "¿es correcto este
+ * resumen?" (frase que no matchea ningún paso), lastAskedStep se quedó en 4
+ * (nombre de campaña), y el "si, es correcto" del usuario se guardó como
+ * NOMBRE DE CAMPAÑA — contaminando después hasta el asunto del correo.
+ */
+const CONFIRMATION_RE = /^(s[ií]|no|ok|okay|va|vale|dale|claro|perfecto|listo|correcto|de acuerdo|(s[ií],?\s*)?(es\s*)?correcto)[.!\s]*$/i;
+
 function storeBriefAnswer(text) {
+    // Confirmaciones no se guardan como respuesta de ningún campo.
+    if (CONFIRMATION_RE.test(text.trim())) {
+        if (userEmail) briefData.userEmail = userEmail;
+        return;
+    }
+    // Si MELISA ya está emitiendo su estado estructurado (BRIEF_STATE), ese
+    // estado es la fuente de verdad — el guardado por palabra clave queda
+    // desactivado para no contaminar campos con respuestas mal clasificadas.
+    if (briefStateActive && lastAskedStep !== 1) {
+        if (userEmail) briefData.userEmail = userEmail;
+        return;
+    }
     if (lastAskedStep === 1) {
         // Parse name and email from text
         const emailMatch = text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
@@ -687,7 +771,7 @@ function restoreDraftIntoUI(draft) {
             avatar.className = 'bot-avatar';
             const botDiv = document.createElement('div');
             botDiv.className = 'msg bot';
-            botDiv.innerHTML = DOMPurify.sanitize(marked.parse(text));
+            botDiv.innerHTML = DOMPurify.sanitize(marked.parse(stripBriefState(text)));
             botRow.appendChild(avatar);
             botRow.appendChild(botDiv);
             chat.appendChild(botRow);
@@ -1258,7 +1342,9 @@ async function llamarAPI(originalText, _retry = true) {
                         if (data.candidates && data.candidates[0].content) {
                             const newText = data.candidates[0].content.parts[0].text;
                             botFullText += newText;
-                            botDiv.innerHTML = DOMPurify.sanitize(marked.parse(botFullText));
+                            // stripBriefState: la línea [BRIEF_STATE]{...} nunca
+                            // se muestra, ni siquiera parcial durante el streaming
+                            botDiv.innerHTML = DOMPurify.sanitize(marked.parse(stripBriefState(botFullText)));
                             chat.scrollTop = chat.scrollHeight;
                         }
                     } catch (e) { }
@@ -1268,6 +1354,22 @@ async function llamarAPI(originalText, _retry = true) {
 
         conversationHistory.push({ role: "model", parts: [{ text: botFullText }] });
 
+        // ── BRIEF_STATE: fuente de verdad de briefData ────────────────
+        // Se guarda el texto COMPLETO en el historial (así el modelo ve sus
+        // propios estados previos y mantiene consistencia), pero al usuario
+        // solo se le muestra la parte conversacional.
+        const hadState = applyBriefState(botFullText);
+        const displayText = stripBriefState(botFullText);
+        botDiv.innerHTML = DOMPurify.sanitize(marked.parse(displayText));
+        if (!hadState) {
+            // El modelo omitió (o rompió) su línea de estado — el sistema viejo
+            // de palabras clave sigue de respaldo, pero queremos saberlo.
+            logClientEvent('brief_state_missing', null, {
+                campaignName: briefData.campaignName,
+                lastAskedStep,
+            });
+        }
+
         // Log this turn para poder auditar la conversación después — completa o
         // abandonada. No depende de que el brief termine ni de que se descargue
         // nada; se dispara en cada ida y vuelta con MELISA. Buscar por sessionId,
@@ -1276,14 +1378,15 @@ async function llamarAPI(originalText, _retry = true) {
         logClientEvent('conversation_turn', null, {
             step: lastAskedStep,
             userMessage: (lastUserMsg ? lastUserMsg.parts[0].text : '').substring(0, 2000),
-            botMessage: botFullText.substring(0, 2000),
+            botMessage: displayText.substring(0, 2000),
+            hadState,
             campaignName: briefData.campaignName,
             brand: briefData.brand,
             userEmail: briefData.userEmail,
         });
 
         // Detect which step the bot just asked → next user reply will be stored under it
-                const detectedStep = detectStepInText(botFullText);
+                const detectedStep = detectStepInText(displayText);
         if (detectedStep > 0) {
             lastAskedStep = detectedStep;
 
@@ -1302,7 +1405,7 @@ async function llamarAPI(originalText, _retry = true) {
             // causaba pérdida silenciosa de datos (ver storeBriefAnswer); ahora
             // ya no se pierde, pero igual queremos saber qué tan seguido pasa
             // para poder ampliar STEP_KEYWORDS con las frases que se escapan.
-            logClientEvent('step_detection_failed', botFullText.substring(0, 300), {
+            logClientEvent('step_detection_failed', displayText.substring(0, 300), {
                 lastAskedStep,
                 campaignName: briefData.campaignName,
             });
@@ -1312,7 +1415,7 @@ async function llamarAPI(originalText, _retry = true) {
         updateBriefProgress();
 
         // Render quick reply buttons if the message contains selectable options
-        renderQuickReplies(botDiv, botFullText, detectedStep);
+        renderQuickReplies(botDiv, displayText, detectedStep);
 
         // Detectar brief completo e inyectar botón de descarga como burbuja en el chat.
         // Dos caminos, para no depender 100% de que Gemini diga la frase exacta:
@@ -1321,7 +1424,7 @@ async function llamarAPI(originalText, _retry = true) {
         //     modelo no haya dicho esa frase — red de seguridad para el caso donde
         //     el usuario llega al final y nunca ve el botón de descarga.
         const searchTerms = ["resumen final para documento", "--- resumen final", "brief completo"];
-        const closedByPhrase = searchTerms.some(term => botFullText.toLowerCase().includes(term));
+        const closedByPhrase = searchTerms.some(term => displayText.toLowerCase().includes(term));
 
         // ── Insistencia en campos faltantes ──────────────────────────
         // Requisito: el brief DEBE quedar completo, venga la info de la
@@ -1585,14 +1688,14 @@ function getFinalBriefContent() {
         const text = conversationHistory[i].parts[0].text;
         if (text.includes("--- RESUMEN FINAL PARA DOCUMENTO ---")) {
             const parts = text.split("--- RESUMEN FINAL PARA DOCUMENTO ---");
-            return parts[parts.length - 1].trim();
+            return stripBriefState(parts[parts.length - 1]).trim();
         }
     }
 
     // ③ Last resort: last model message
     for (let i = conversationHistory.length - 1; i >= 0; i--) {
         if (conversationHistory[i].role === "model") {
-            return conversationHistory[i].parts[0].text;
+            return stripBriefState(conversationHistory[i].parts[0].text);
         }
     }
     return '';
@@ -1633,6 +1736,21 @@ async function loadSvgAsPng(url, targetW = 800, targetH = 200) {
         img.onerror = (e) => { URL.revokeObjectURL(blobUrl); reject(e); };
         img.src = blobUrl;
     });
+}
+
+// ── Nombre descriptivo para el PDF ────────────────────────────────
+// Brief_MELISA.pdf no dice nada cuando tienes varios briefs descargados.
+// Ahora: Brief_<Marca>_<Campaña>_<fecha>.pdf (saneado: sin acentos, sin
+// saltos de línea, sin caracteres raros).
+function briefFileName(suffix = '') {
+    const slug = (v) => String(v || '')
+        .replace(/[\r\n\t]+/g, ' ')
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-zA-Z0-9 _-]/g, '')
+        .trim().replace(/\s+/g, '_').substring(0, 40);
+    const parts = ['Brief', slug(briefData.brand), slug(briefData.campaignName)].filter(Boolean);
+    const date = new Date().toISOString().slice(0, 10);
+    return `${parts.join('_')}_${date}${suffix}.pdf`;
 }
 
 async function descargarBrief() {
@@ -1847,8 +1965,8 @@ async function descargarBrief() {
             y += blockH;
         }
 
-        // Save locally
-        doc.save('Brief_MELISA.pdf');
+        // Save locally — nombre descriptivo con marca, campaña y fecha
+        doc.save(briefFileName());
         clearDraft(); // el usuario ya tiene su PDF — ya no hace falta el borrador
 
         // Send backup copy by email
@@ -2036,7 +2154,7 @@ function descargarBriefSimple() {
         y += split.length * 5 + (isTitle ? 3 : 1.5);
     });
 
-    doc.save('Brief_MELISA_Simple.pdf');
+    doc.save(briefFileName('_simple'));
 }
 
 

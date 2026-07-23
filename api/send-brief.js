@@ -133,21 +133,31 @@ module.exports = async function handler(req, res) {
 
         const resend = new Resend(apiKey);
 
-        // Attachment
-        const slug = (briefData && briefData.campaignName)
-            ? briefData.campaignName.replace(/\s+/g, '_').substring(0, 40)
-            : '';
+        // FIX 422 Resend ("The `\n` is not allowed in the `subject` field"):
+        // el campaignName puede llegar contaminado con saltos de l\u00EDnea (pas\u00F3 en
+        // producci\u00F3n el 23/jul). Todo lo que va a subject/filename se aplana a
+        // una sola l\u00EDnea y se recorta.
+        const oneLine = (v) => String(v || '').replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim().substring(0, 80);
+        const campaignName = oneLine(briefData && briefData.campaignName);
+        const brandName    = oneLine(briefData && briefData.brand);
+
+        // Attachment \u2014 nombre descriptivo: Brief_<Marca>_<Campa\u00F1a>[_TEST].pdf
+        const fileSlug = (v) => oneLine(v)
+            .normalize('NFD').replace(/[\u0300-\u036F]/g, '')  // sin acentos
+            .replace(/[^a-zA-Z0-9 _-]/g, '')
+            .trim().replace(/\s+/g, '_').substring(0, 40);
+        const nameParts = ['Brief', fileSlug(brandName), fileSlug(campaignName)].filter(Boolean);
         const attachments = pdfBase64 ? [{
-            filename: 'Brief_MELISA' + (isTest ? '_TEST' : '') + (slug ? '_' + slug : '') + '.pdf',
+            filename: nameParts.join('_') + (isTest ? '_TEST' : '') + '.pdf',
             content: pdfBase64,
         }] : [];
 
         // Subject
         const subject = isTest
-            ? ('\uD83E\uDDEA [TEST] Brief MELISA' + (briefData && briefData.campaignName ? ': ' + briefData.campaignName : ''))
+            ? ('\uD83E\uDDEA [TEST] Brief MELISA' + (campaignName ? ': ' + campaignName : ''))
             : ('\uD83D\uDCC4 Nuevo brief' +
-               (briefData && briefData.campaignName ? ': ' + briefData.campaignName : '') +
-               (briefData && briefData.brand        ? ' \u00B7 ' + briefData.brand : ''));
+               (campaignName ? ': ' + campaignName : '') +
+               (brandName    ? ' \u00B7 ' + brandName : ''));
 
         const { data, error } = await resend.emails.send({
             from: 'MELISA <onboarding@resend.dev>',
