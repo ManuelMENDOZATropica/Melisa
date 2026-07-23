@@ -116,6 +116,40 @@ body::before {
     filter: brightness(1.08);
 }
 
+/* Botón "Enviar documento" — junto al de generar. Se ve atenuado hasta que
+   haya un documento generado (clase .ready), pero siempre es clickeable:
+   si no hay documento, primero lo genera y luego lo envía. */
+#sendBriefBtn {
+    display: block;
+    position: absolute;
+    right: 190px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: var(--ml-dark);
+    color: #fff;
+    border: none;
+    border-radius: 20px;
+    padding: 8px 16px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    transition: filter 0.15s, opacity 0.15s;
+    opacity: 0.55;
+}
+
+#sendBriefBtn.ready {
+    opacity: 1;
+}
+
+#sendBriefBtn:hover {
+    filter: brightness(1.15);
+}
+
+#sendBriefBtn:disabled {
+    cursor: wait;
+}
+
 /* ─── Main Content Area ──────────────────────────────────────── */
 .page-body {
     flex: 1;
@@ -412,9 +446,16 @@ body::before {
         font-size: 0.9rem;
     }
 
+    #sendBriefBtn {
+        right: 52px;
+        padding: 6px 10px;
+        font-size: 0.9rem;
+    }
+
     /* En pantallas chicas el logo ocupa casi todo el ancho — dejamos
        solo el ícono para no encimarnos con él. */
-    .downloadBtn-label {
+    .downloadBtn-label,
+    .sendBriefBtn-label {
         display: none;
     }
 

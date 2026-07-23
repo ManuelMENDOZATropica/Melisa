@@ -230,6 +230,7 @@ Al FINAL de CADA una de tus respuestas (sin excepción), agrega una última lín
 
 Reglas de esta línea:
 - JSON válido en UNA sola línea. Incluye SOLO los campos que ya conoces con certeza, vengan de las respuestas del usuario O de un documento adjunto que hayas analizado.
+- El estado es ACUMULADO: en CADA respuesta repite TODAS las claves conocidas hasta ese momento — las de turnos anteriores Y la que el usuario acaba de responder en este turno. Omitir una clave ya conocida es un error grave.
 - Claves permitidas (usa exactamente estos nombres): userNameField, userEmail, campaignName, brand, projectLeadMeli, projectLeadBrand, campaignType, markets, businessContext, challengeTweet, kpis, objectiveFocus, objectiveMain, heroProducts, targetAudience, consumerInsight, competition, differentiator, creativeConceptStatus, tagline, keyMessage, emotionalTerritory, previousCampaigns, aiUsage, referenceFiles, dosAndDonts, promotionalMechanics, brandInvestmentUSD, coreFormats, amplification, brandedContent, timeline, additionalData, mediaPlanUSD
 - Valores: strings fieles a lo que dijo el usuario o el documento (resume solo si supera ~300 caracteres). Sin saltos de línea dentro de los valores.
 - NO incluyas campos que aún no conoces. NO uses "Por definir" ni valores vacíos.
@@ -600,10 +601,32 @@ function storeBriefAnswer(text) {
         if (userEmail) briefData.userEmail = userEmail;
         return;
     }
-    // Si MELISA ya está emitiendo su estado estructurado (BRIEF_STATE), ese
-    // estado es la fuente de verdad — el guardado por palabra clave queda
-    // desactivado para no contaminar campos con respuestas mal clasificadas.
+    // ── Durante un nudge sabemos EXACTAMENTE qué campo se preguntó ──
+    // (la nota interna instruye preguntar los faltantes en orden). Guardamos
+    // la respuesta directo en ese campo, sin depender ni de keywords ni de
+    // que el modelo lo incluya en su BRIEF_STATE — que es justo lo que falló
+    // en la sesión Dove: MELISA confirmaba la respuesta en texto pero la
+    // omitía del estado, y el campo quedaba vacío para siempre.
+    while (nudgeFieldQueue.length > 0 && briefData[nudgeFieldQueue[0]] && briefData[nudgeFieldQueue[0]].trim()) {
+        nudgeFieldQueue.shift(); // salta los que ya se llenaron por otra vía
+    }
+    if (nudgeFieldQueue.length > 0) {
+        const field = nudgeFieldQueue.shift();
+        if (!(briefData[field] && briefData[field].trim())) {
+            briefData[field] = text.trim();
+        }
+        if (userEmail) briefData.userEmail = userEmail;
+        return;
+    }
+    // Con BRIEF_STATE activo, el guardado por palabra clave solo RELLENA
+    // HUECOS (campos vacíos que el estado omitió) — nunca sobreescribe, para
+    // no contaminar con respuestas mal clasificadas.
     if (briefStateActive && lastAskedStep !== 1) {
+        const field = STEP_TO_FIELD[lastAskedStep];
+        if (field && text && !text.startsWith('[DOCUMENTO ADJUNTO:')
+            && !(briefData[field] && briefData[field].trim())) {
+            briefData[field] = text.trim();
+        }
         if (userEmail) briefData.userEmail = userEmail;
         return;
     }
@@ -847,6 +870,17 @@ let downloadBubbleShown = false;
 // campo nunca se logra capturar (p.ej. por fallo de detección de paso).
 let completionNudgesSent = 0;
 const MAX_COMPLETION_NUDGES = 6;
+
+// Anti-loop (bug real, sesión Dove 23/jul): si un nudge lista los MISMOS
+// faltantes que el anterior, no hubo progreso — insistir de nuevo genera un
+// ciclo infinito de "disculpa, ¿cuáles son los KPIs?" aunque el usuario ya
+// respondió. En ese caso dejamos cerrar (los campos salen "Por definir").
+let lastNudgeMissingSignature = '';
+
+// Cola de campos preguntados durante un nudge. Como la nota interna le dice
+// a MELISA que pregunte los faltantes EN ORDEN, sabemos con certeza a qué
+// campo corresponde cada respuesta del usuario — sin adivinar por keywords.
+let nudgeFieldQueue = [];
 
 /** Prefijo de mensajes internos que el usuario nunca escribió ni debe ver. */
 const INTERNAL_NOTE_PREFIX = '[NOTA INTERNA';
@@ -1411,22 +1445,40 @@ async function llamarAPI(originalText, _retry = true) {
         // no la dejamos cerrar: le inyectamos una nota interna (que el usuario
         // no ve) con la lista exacta de lo que falta, y MELISA sigue
         // preguntando uno por uno.
-        if (closedByPhrase && !isBriefDataComplete() && completionNudgesSent < MAX_COMPLETION_NUDGES) {
-            completionNudgesSent++;
-            const missingLabels = getMissingBriefFields().map(f => FIELD_LABELS[f] || f);
-            logClientEvent('completion_nudge_sent', null, {
-                nudge: completionNudgesSent,
-                missing: missingLabels.join(' | '),
-                campaignName: briefData.campaignName,
-            });
-            conversationHistory.push({
-                role: 'user',
-                parts: [{
-                    text: `${INTERNAL_NOTE_PREFIX} DEL SISTEMA — el usuario NO ve este mensaje ni lo escribió él]\nAún faltan estos datos obligatorios del brief:\n${missingLabels.map(l => `- ${l}`).join('\n')}\n\nNO generes el resumen final todavía. Discúlpate brevemente por el detalle pendiente y pregunta por el PRIMER dato faltante de la lista, usando la redacción original de la pregunta correspondiente del flujo. Una sola pregunta. Continúa con los demás datos faltantes en los siguientes turnos antes de generar el resumen final.`,
-                }],
-            });
-            await llamarAPI('');
-            return;
+        if (closedByPhrase && !isBriefDataComplete()) {
+            const missingFields = getMissingBriefFields();
+            const signature = missingFields.join('|');
+
+            if (signature === lastNudgeMissingSignature || completionNudgesSent >= MAX_COMPLETION_NUDGES) {
+                // ANTI-LOOP: mismos faltantes que el nudge anterior (o tope
+                // alcanzado) — insistir de nuevo solo repite el ciclo (bug
+                // real, sesión Dove). Dejamos cerrar: el resumen sale con esos
+                // campos como "Por definir" y queda logueado para revisarlo.
+                logClientEvent('completion_nudge_loop_detected', null, {
+                    missing: missingFields.map(f => FIELD_LABELS[f] || f).join(' | '),
+                    nudges: completionNudgesSent,
+                    campaignName: briefData.campaignName,
+                });
+                nudgeFieldQueue = [];
+            } else {
+                completionNudgesSent++;
+                lastNudgeMissingSignature = signature;
+                nudgeFieldQueue = [...missingFields]; // respuestas → campos, en orden
+                const missingLabels = missingFields.map(f => FIELD_LABELS[f] || f);
+                logClientEvent('completion_nudge_sent', null, {
+                    nudge: completionNudgesSent,
+                    missing: missingLabels.join(' | '),
+                    campaignName: briefData.campaignName,
+                });
+                conversationHistory.push({
+                    role: 'user',
+                    parts: [{
+                        text: `${INTERNAL_NOTE_PREFIX} DEL SISTEMA — el usuario NO ve este mensaje ni lo escribió él]\nAún faltan estos datos obligatorios del brief:\n${missingLabels.map(l => `- ${l}`).join('\n')}\n\nNO generes el resumen final todavía. Discúlpate brevemente por el detalle pendiente y pregunta por el PRIMER dato faltante de la lista, usando la redacción original de la pregunta correspondiente del flujo. Una sola pregunta. Continúa con los demás datos faltantes en los siguientes turnos antes de generar el resumen final.\n\nIMPORTANTE: tu línea [BRIEF_STATE] es un estado ACUMULADO — en cada respuesta debe incluir TODAS las claves que ya conoces, muy especialmente las que el usuario acaba de responder. No omitas ninguna.`,
+                    }],
+                });
+                await llamarAPI('');
+                return;
+            }
         }
 
         if (!downloadBubbleShown && (closedByPhrase || isBriefDataComplete())) {
@@ -1635,15 +1687,21 @@ function showDownloadBubble() {
         <button class="btn-download-brief" id="btn-download-brief">
             📄 Descargar Brief PDF
         </button>
+        <button class="btn-download-brief js-send-brief" id="btn-send-brief" style="background:var(--ml-dark);margin-top:8px;">
+            📬 Enviar documento a TRÓPICA
+        </button>
     `;
 
     row.appendChild(avatar);
     row.appendChild(card);
     chat.appendChild(row);
 
-    // Bind download button (CSP-safe, no inline handler)
+    // Bind buttons (CSP-safe, no inline handlers)
     const dlBtn = card.querySelector('#btn-download-brief');
     if (dlBtn) dlBtn.addEventListener('click', () => descargarBrief());
+    const sendBtn = card.querySelector('#btn-send-brief');
+    if (sendBtn) sendBtn.addEventListener('click', () => enviarDocumento(sendBtn));
+    updateSendButtonsState();
 
     chat.scrollTop = chat.scrollHeight;
 }
@@ -1718,6 +1776,49 @@ async function loadSvgAsPng(url, targetW = 800, targetH = 200) {
         img.onerror = (e) => { URL.revokeObjectURL(blobUrl); reject(e); };
         img.src = blobUrl;
     });
+}
+
+// ── Enviar documento ──────────────────────────────────────────────
+// El último PDF generado se guarda en memoria para poder (re)enviarlo por
+// correo con el botón "Enviar documento". Regla: solo se envía un documento
+// que realmente se generó; si aún no hay ninguno, el botón primero lo genera
+// (y descargarBrief ya envía el respaldo automáticamente al generar).
+let lastGeneratedPdfBase64 = null;
+
+function updateSendButtonsState() {
+    const enabled = !!lastGeneratedPdfBase64;
+    document.querySelectorAll('.js-send-brief').forEach(btn => {
+        btn.classList.toggle('ready', enabled);
+        btn.title = enabled
+            ? 'Enviar el documento por correo a TRÓPICA'
+            : 'Genera el documento primero (o haz clic y lo generamos por ti)';
+    });
+}
+
+async function enviarDocumento(btn) {
+    const originalHtml = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Enviando...'; }
+    try {
+        if (!lastGeneratedPdfBase64) {
+            // No hay documento aún: generarlo (descarga + envía el respaldo)
+            await descargarBrief();
+            if (!lastGeneratedPdfBase64) throw new Error('No se pudo generar el documento');
+        } else {
+            await sendBriefByEmail(lastGeneratedPdfBase64);
+        }
+        if (btn) btn.innerHTML = '✅ Enviado';
+    } catch (e) {
+        console.error('enviarDocumento error:', e);
+        logClientEvent('manual_send_failed', e && e.message, {
+            campaignName: briefData.campaignName,
+            userEmail: briefData.userEmail,
+        });
+        if (btn) btn.innerHTML = '❌ Error al enviar';
+    } finally {
+        setTimeout(() => {
+            if (btn) { btn.disabled = false; btn.innerHTML = originalHtml; }
+        }, 3000);
+    }
 }
 
 // ── Nombre descriptivo para el PDF ────────────────────────────────
@@ -1949,6 +2050,8 @@ async function descargarBrief() {
 
         // Save locally — nombre descriptivo con marca, campaña y fecha
         doc.save(briefFileName());
+        lastGeneratedPdfBase64 = doc.output('datauristring').split(',')[1];
+        updateSendButtonsState();
         // Solo limpiamos el borrador si el brief está COMPLETO. El botón de
         // generar está disponible a media conversación, y borrar el respaldo
         // en una descarga intermedia hizo perder una conversación real
@@ -1958,8 +2061,7 @@ async function descargarBrief() {
 
         // Send backup copy by email
         try {
-            const pdfBase64 = doc.output('datauristring').split(',')[1];
-            await sendBriefByEmail(pdfBase64);
+            await sendBriefByEmail(lastGeneratedPdfBase64);
         } catch (mailErr) {
             console.warn('Email send failed silently:', mailErr);
             logClientEvent('backup_email_failed', mailErr && mailErr.message, {
@@ -2142,6 +2244,8 @@ function descargarBriefSimple() {
     });
 
     doc.save(briefFileName('_simple'));
+    lastGeneratedPdfBase64 = doc.output('datauristring').split(',')[1];
+    updateSendButtonsState();
 }
 
 
@@ -2394,9 +2498,14 @@ async function debugGenerarPDF() {
 // removed from index.html to comply with CSP script-src policy.
 // They are bound here via addEventListener instead.
 
-// Download button (hidden in header)
+// Download button (header)
 const downloadBtn = document.getElementById('downloadBtn');
 if (downloadBtn) downloadBtn.addEventListener('click', () => descargarBrief());
+
+// Send button (header) — envía el último PDF generado (o lo genera primero)
+const sendBriefBtnEl = document.getElementById('sendBriefBtn');
+if (sendBriefBtnEl) sendBriefBtnEl.addEventListener('click', () => enviarDocumento(sendBriefBtnEl));
+updateSendButtonsState();
 
 // Initial language quick-reply buttons
 const initialQR = document.getElementById('initial-quick-replies');
