@@ -46,7 +46,9 @@
         <!-- Hidden elements kept for JS compatibility -->
         <h1 style="display:none">TRÓPICA</h1>
         <p style="display:none">MELISA</p>
-        <button id="downloadBtn" style="display:none">Descargar Brief PDF</button>
+        <!-- Disponible desde el inicio: permite generar el documento aunque
+             el brief no esté completo (ver descargarBrief() en script.js) -->
+        <button id="downloadBtn">📄<span class="downloadBtn-label"> Generar documento</span></button>
     </header>
 
     <!-- ── Page Body ───────────────────────────────────── -->

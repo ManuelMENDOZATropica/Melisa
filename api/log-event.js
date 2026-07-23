@@ -10,8 +10,10 @@
 //
 // This endpoint just needs to make those failures visible: every event
 // is logged (searchable in Vercel's function logs by the "[MELISA:client-event]"
-// prefix), and events considered critical also trigger a real-time email
-// alert via Resend so the team finds out without having to go digging.
+// prefix), forwarded to a Google Sheet for a permanent, browsable record of
+// EVERY conversation (completed or abandoned — see forwardToGoogleSheets()
+// and google-apps-script/melisa-logger.gs), and events considered critical
+// also trigger a real-time email alert via Resend.
 const { Resend } = require('resend');
 
 const NOTIFY_EMAILS = ['hola@tropica.me'];
@@ -22,6 +24,47 @@ const CRITICAL_EVENTS = new Set([
     'api_chat_failed',
     'backup_email_failed',
 ]);
+
+/**
+ * 'conversation_turn' fires on every single exchange with MELISA (completed
+ * briefs AND abandoned ones) so the team can audit any session afterwards —
+ * this is NOT a critical event, just an audit trail, so it must never
+ * trigger an email alert or it would spam the inbox on every message.
+ */
+
+/** Caps every string value inside meta so a single event can't blow up the log line. */
+function truncateMeta(meta) {
+    const out = {};
+    for (const [k, v] of Object.entries(meta)) {
+        out[k] = typeof v === 'string' ? v.substring(0, 2500) : v;
+    }
+    return out;
+}
+
+/**
+ * Forwards every event to a Google Sheet (via a Google Apps Script web app
+ * — see google-apps-script/melisa-logger.gs for the script + deploy steps)
+ * so ALL conversations end up in a spreadsheet, not just the ones that
+ * finish with a completed brief. No-ops until GOOGLE_SHEETS_WEBHOOK_URL is
+ * configured in Vercel; never throws, never blocks the response.
+ */
+async function forwardToGoogleSheets(payload) {
+    const url = process.env.GOOGLE_SHEETS_WEBHOOK_URL;
+    if (!url) return;
+    try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            signal: controller.signal,
+        });
+        clearTimeout(timeout);
+    } catch (err) {
+        console.error('[MELISA:log-event] Google Sheets forward failed:', err.message);
+    }
+}
 
 /** Security headers added to every response */
 const SEC_HEADERS = {
@@ -45,16 +88,23 @@ module.exports = async function handler(req, res) {
         }
 
         const safeDetail = detail ? String(detail).substring(0, 2000) : '';
-        const safeMeta = (meta && typeof meta === 'object') ? meta : {};
+        const safeMeta = truncateMeta((meta && typeof meta === 'object') ? meta : {});
+
+        const userAgent = req.headers['user-agent'] || '';
+        const ts = new Date().toISOString();
 
         // Always logged — this alone fixes "revisé los logs y no veo nada",
         // since these events previously never reached the server at all.
         console.error(`[MELISA:client-event] ${event}`, {
             detail: safeDetail,
             meta: safeMeta,
-            userAgent: req.headers['user-agent'] || '',
-            ts: new Date().toISOString(),
+            userAgent,
+            ts,
         });
+
+        // Guarda TODAS las conversaciones (completas y abandonadas) en Google
+        // Sheets — no bloquea ni depende de que esto funcione para responder.
+        await forwardToGoogleSheets({ event, detail: safeDetail, meta: safeMeta, userAgent, ts });
 
         if (CRITICAL_EVENTS.has(event) && process.env.RESEND_API_KEY) {
             try {

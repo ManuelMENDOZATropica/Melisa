@@ -529,12 +529,35 @@ function storeBriefAnswer(text) {
 // Fire-and-forget logger for failures that would otherwise leave zero
 // trace (nothing reaches /api/chat or /api/send-brief when the failure
 // happens purely in the browser). Never throws, never blocks the UI.
+
+/**
+ * Persistent per-browser session id (survives reloads, ties to the same
+ * localStorage draft). Lets the admin filter Vercel logs down to a single
+ * conversation — completed or abandoned — instead of grepping everything.
+ */
+const SESSION_ID_KEY = 'melisa_session_id';
+function getSessionId() {
+    try {
+        let id = localStorage.getItem(SESSION_ID_KEY);
+        if (!id) {
+            id = (window.crypto && crypto.randomUUID)
+                ? crypto.randomUUID()
+                : `sess_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+            localStorage.setItem(SESSION_ID_KEY, id);
+        }
+        return id;
+    } catch (e) {
+        return 'no-storage';
+    }
+}
+const sessionId = getSessionId();
+
 function logClientEvent(event, detail, meta = {}) {
     try {
         fetch('/api/log-event', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ event, detail: detail ? String(detail) : '', meta }),
+            body: JSON.stringify({ event, detail: detail ? String(detail) : '', meta: { sessionId, ...meta } }),
         }).catch(() => { /* telemetry is best-effort */ });
     } catch (e) { /* never let logging break the app */ }
 }
@@ -1062,6 +1085,20 @@ async function llamarAPI(originalText, _retry = true) {
 
         conversationHistory.push({ role: "model", parts: [{ text: botFullText }] });
 
+        // Log this turn para poder auditar la conversación después — completa o
+        // abandonada. No depende de que el brief termine ni de que se descargue
+        // nada; se dispara en cada ida y vuelta con MELISA. Buscar por sessionId,
+        // marca o campaña en los logs de Vercel para reconstruir cualquier sesión.
+        const lastUserMsg = [...conversationHistory].reverse().find(m => m.role === 'user');
+        logClientEvent('conversation_turn', null, {
+            step: lastAskedStep,
+            userMessage: (lastUserMsg ? lastUserMsg.parts[0].text : '').substring(0, 2000),
+            botMessage: botFullText.substring(0, 2000),
+            campaignName: briefData.campaignName,
+            brand: briefData.brand,
+            userEmail: briefData.userEmail,
+        });
+
         // Detect which step the bot just asked → next user reply will be stored under it
                 const detectedStep = detectStepInText(botFullText);
         if (detectedStep > 0) {
@@ -1314,9 +1351,13 @@ function showDownloadBubble() {
  *           3) Last model message (last resort)
  */
 function getFinalBriefContent() {
-    // ① Build from live data if we have meaningful content
+    // ① Build from live data if hay AL MENOS algo — el documento ahora se puede
+    // generar aunque el brief esté incompleto (campos faltantes salen como
+    // "Por definir" gracias a buildBriefFromData/nd()). Antes se pedían 3+
+    // campos para usar esta ruta; bajamos el umbral para que el botón sirva
+    // también muy temprano en la conversación.
     const liveFields = Object.values(briefData).filter(v => v && v.trim());
-    if (liveFields.length >= 3) {
+    if (liveFields.length >= 1) {
         return buildBriefFromData();
     }
 
@@ -1376,10 +1417,21 @@ async function loadSvgAsPng(url, targetW = 800, targetH = 200) {
 }
 
 async function descargarBrief() {
+    // El botón ahora está disponible desde el inicio de la conversación, no
+    // solo cuando el brief está completo. Si falta información, se avisa
+    // explícitamente antes de generar — los campos vacíos quedan como
+    // "Por definir" en el documento.
+    if (!isBriefDataComplete()) {
+        const proceed = window.confirm(
+            'El brief todavía no está completo.\n\n¿Generar el documento de todas formas con la información que tienes hasta ahora? Los campos faltantes se marcarán como "Por definir".'
+        );
+        if (!proceed) return;
+    }
+
     try {
         const { jsPDF } = window.jspdf;
         const finalSummary = getFinalBriefContent();
-        if (!finalSummary) { alert('Aún no hay un brief final para descargar.'); return; }
+        if (!finalSummary) { alert('Aún no hay nada que descargar todavía — responde al menos una pregunta primero.'); return; }
 
         // ── Cargar assets de marca ───────────────────────────────────
         const [fondoB64] = await Promise.all([
@@ -1598,16 +1650,34 @@ async function descargarBrief() {
             campaignName: briefData.campaignName,
             userEmail: briefData.userEmail,
         });
-        descargarBriefSimple();
-        clearDraft(); // el usuario igual se llevó un PDF (versión simple)
 
-        // Aunque el PDF con estilo haya fallado, intentamos mandar el respaldo
-        // por correo con lo que sí tenemos — para que quede rastro server-side
-        // incluso en este camino degradado.
+        // Ojo: el correo de respaldo solo se manda si REALMENTE se generó un
+        // documento (con estilo o simple). Si descargarBriefSimple() también
+        // falla, no se manda nada — no tiene sentido avisar "aquí está tu
+        // brief" sin que exista ningún documento.
+        let simpleGenerated = false;
         try {
-            await sendBriefByEmail(null);
-        } catch (mailErr2) {
-            console.warn('Backup email (fallback path) also failed:', mailErr2);
+            descargarBriefSimple();
+            simpleGenerated = true;
+        } catch (simpleErr) {
+            console.error('Error generando PDF simple:', simpleErr);
+            logClientEvent('simple_pdf_generation_failed', simpleErr && simpleErr.message, {
+                campaignName: briefData.campaignName,
+                userEmail: briefData.userEmail,
+            });
+        }
+
+        if (simpleGenerated) {
+            clearDraft(); // el usuario igual se llevó un PDF (versión simple)
+            try {
+                await sendBriefByEmail(null);
+            } catch (mailErr2) {
+                console.warn('Backup email (fallback path) also failed:', mailErr2);
+                logClientEvent('backup_email_failed', mailErr2 && mailErr2.message, {
+                    campaignName: briefData.campaignName,
+                    userEmail: briefData.userEmail,
+                });
+            }
         }
     }
 }
