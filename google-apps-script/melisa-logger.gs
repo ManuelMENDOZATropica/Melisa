@@ -12,9 +12,10 @@
  * sesiones (nada de "dame todas las de julio" o "cuáles se abandonaron").
  * En vez de eso:
  *
- *   • "MELISA_Logs"     → historial completo, UNA FILA POR TURNO. Sirve para
- *                         auditar el detalle de una conversación puntual
- *                         (filtrando por SessionId).
+ *   • "Logs_<fecha>"    → historial completo, UNA FILA POR TURNO, en una
+ *                         pestaña nueva cada día (hora de México). Para
+ *                         auditar una conversación puntual, filtra por
+ *                         SessionId dentro del día correspondiente.
  *   • "MELISA_Sesiones" → UNA FILA POR SESIÓN (se actualiza sola en cada
  *                         turno). Esta es la vista rápida: qué sesiones
  *                         hay, cuántos turnos tuvo cada una, en qué paso
@@ -48,8 +49,13 @@
  * Excel (.xlsx) — Sheets exporta cada pestaña como una hoja del .xlsx.
  */
 
-const LOG_SHEET_NAME = 'MELISA_Logs';
+// Los logs crudos van en UNA PESTAÑA POR DÍA (Logs_2026-07-23, hora de
+// México) para que cada jornada sea fácil de revisar y exportar por separado.
+// MELISA_Sesiones se mantiene como resumen GLOBAL (una fila por sesión,
+// cruzando días — una conversación puede empezar un día y seguir al otro).
+const LOG_SHEET_PREFIX = 'Logs_';
 const SESSIONS_SHEET_NAME = 'MELISA_Sesiones';
+const TIMEZONE = 'America/Mexico_City';
 
 function doPost(e) {
     try {
@@ -87,11 +93,14 @@ function appendLogRow_(data, meta) {
     ]);
 }
 
+/** Pestaña del día actual (p.ej. "Logs_2026-07-23"), creada si no existe.
+ *  La más reciente se mueve al frente para encontrarla rápido. */
 function getOrCreateLogSheet_() {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    let sheet = ss.getSheetByName(LOG_SHEET_NAME);
+    const name = LOG_SHEET_PREFIX + Utilities.formatDate(new Date(), TIMEZONE, 'yyyy-MM-dd');
+    let sheet = ss.getSheetByName(name);
     if (!sheet) {
-        sheet = ss.insertSheet(LOG_SHEET_NAME);
+        sheet = ss.insertSheet(name, 0); // índice 0 → primera pestaña
         sheet.appendRow([
             'Fecha', 'Evento', 'SessionId', 'Paso', 'Marca', 'Campaña',
             'Email', 'Mensaje Usuario', 'Respuesta MELISA', 'Detalle', 'User-Agent',

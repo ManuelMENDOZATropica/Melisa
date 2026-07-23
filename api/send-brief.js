@@ -1,12 +1,21 @@
 // CommonJS — required for Vercel Node.js runtime
 const { Resend } = require('resend');
 
-// ⚠️ Resend está en modo sandbox: solo permite enviar a la dirección de la
-// cuenta (manuel@tropica.me). Los envíos a hola@tropica.me rebotaban con 403
-// (confirmado en logs del 23/jul). Cuando se verifique el dominio tropica.me
-// en resend.com/domains Y se cambie el `from` a ese dominio, volver a
-// ['hola@tropica.me'] o a la lista que se quiera.
-const NOTIFY_EMAILS = ['manuel@tropica.me'];
+// Destinatarios deseados. ⚠️ Resend está en modo sandbox: solo permite
+// enviar a la dirección de la cuenta (manuel@tropica.me), y si CUALQUIER
+// destinatario no está permitido rechaza el envío COMPLETO con 403
+// (confirmado en logs del 23/jul con hola@tropica.me). Por eso el handler
+// tiene un fallback: si el envío a la lista completa falla por sandbox,
+// reintenta solo con manuel@. tali@ empezará a recibir automáticamente
+// cuando se verifique el dominio en resend.com/domains y se configure la
+// variable de entorno RESEND_FROM (p.ej. "MELISA <melisa@tropica.me>").
+const NOTIFY_EMAILS = ['manuel@tropica.me', 'tali@tropica.me'];
+const SANDBOX_FALLBACK_EMAILS = ['manuel@tropica.me'];
+const FROM_ADDRESS = process.env.RESEND_FROM || 'MELISA <onboarding@resend.dev>';
+
+/** True si el error de Resend es el rechazo típico del modo sandbox. */
+const isSandboxError = (error) =>
+    error && error.statusCode === 403 && /verify a domain/i.test(error.message || '');
 
 /** Security headers added to every response */
 const SEC_HEADERS = {
@@ -159,13 +168,22 @@ module.exports = async function handler(req, res) {
                (campaignName ? ': ' + campaignName : '') +
                (brandName    ? ' \u00B7 ' + brandName : ''));
 
-        const { data, error } = await resend.emails.send({
-            from: 'MELISA <onboarding@resend.dev>',
+        const emailPayload = {
+            from: FROM_ADDRESS,
             to:   NOTIFY_EMAILS,
             subject,
             html: buildEmailHtml(briefData, isMeliUser, isTest),
             attachments,
-        });
+        };
+
+        let { data, error } = await resend.emails.send(emailPayload);
+
+        // Fallback sandbox: si la lista completa fue rechazada, reintenta
+        // solo con la dirección de la cuenta para no perder el respaldo.
+        if (isSandboxError(error)) {
+            console.warn('Resend sandbox: reintentando solo con', SANDBOX_FALLBACK_EMAILS);
+            ({ data, error } = await resend.emails.send({ ...emailPayload, to: SANDBOX_FALLBACK_EMAILS }));
+        }
 
         if (error) {
             console.error('Resend error:', error);
