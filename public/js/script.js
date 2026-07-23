@@ -350,13 +350,18 @@ const STEP_KEYWORDS = [
     { step: 5,  kw: ['cuál es la marca', 'nombre de la marca'] },
     { step: 6,  kw: ['project lead del lado de mercado libre', 'project lead.*meli', 'lidera.*meli'] },
     { step: 7,  kw: ['project lead del lado de la marca', 'lidera.*marca', 'contacto.*marca'] },
-    { step: 8,  kw: ['qué tipo de campaña', 'lanzamiento de producto', 'campaña de temporada', 'awareness de marca', 'performance'] },
+    // ⚠️ Lección aprendida (23/jul): NO usar como keyword frases que aparecen
+    // como OPCIONES de otras preguntas ('awareness', 'influencers', etc.) —
+    // el detector itera en reversa y clasifica mal la pregunta, mandando la
+    // respuesta del usuario al campo equivocado. Solo frases distintivas de
+    // la PREGUNTA en sí.
+    { step: 8,  kw: ['qué tipo de campaña', 'tipo de campaña es esta'] },
     { step: 9,  kw: ['qué mercado', 'en qué mercado', 'méxico', 'argentina', 'brasil', 'colombia'] },
     { step: 10, kw: ['contexto del negocio', 'qué situación motiva', 'dinámica de mercado', 'panorama competitivo'] },
     { step: 11, kw: ['como si fuera un tweet', 'en una sola oración', 'desafío central'] },
-    { step: 12, kw: ['métricas clave de éxito', 'kpis', 'objetivos comerciales', 'sentiment en redes'] },
-    { step: 13, kw: ['centrado principalmente en', 'foco.*marca', 'producto o línea', 'promoción en general'] },
-    { step: 14, kw: ['objetivo principal de campaña', 'awareness', 'intención de compra', 'incremento de ventas'] },
+    { step: 12, kw: ['métricas clave de éxito', 'kpis'] },
+    { step: 13, kw: ['centrado principalmente'] },
+    { step: 14, kw: ['objetivos principales de campaña', 'objetivo principal de campaña', 'selecciona los objetivos'] },
     { step: 15, kw: ['producto.*hero', 'productos hero', 'orden de jerarquía'] },
     { step: 16, kw: ['público objetivo', 'género', 'edad', 'nse', 'intereses en meli', 'palabras clave'] },
     { step: 17, kw: ['key consumer insight', 'necesidad, deseo o miedo', 'qué necesidad'] },
@@ -374,7 +379,7 @@ const STEP_KEYWORDS = [
     { step: 28.5, kw: ['monto de inversión de marca', 'inversión de marca', 'monto de inversión'] },
     { step: 29, kw: ['formatos core', 'home slider', 'rtb banners', 'mercado play'] },
     { step: 30, kw: ['amplificación', 'dooh', 'experiencia digital interactiva'] },
-    { step: 30.5, kw: ['influencer marketing', 'branded content', 'influencers', 'generadores de contenido', 'propuesta de guión'] },
+    { step: 30.5, kw: ['influencer marketing o branded content', 'propuesta de guión'] },
     { step: 31, kw: ['fecha de inicio', 'fecha de fin', 'timeline', '10 días hábiles'] },
     { step: 32, kw: ['información adicional', 'dato adicional', 'estudios de mercado', 'requisitos legales'] },
 ];
@@ -550,6 +555,32 @@ function stripBriefState(text) {
     return idx === -1 ? text : text.slice(0, idx).trimEnd();
 }
 
+/** Extrae el PRIMER objeto JSON balanceado de un string, respetando llaves
+ *  dentro de strings. Necesario porque la regex codiciosa \{[\s\S]*\} fallaba
+ *  cuando el modelo emitía texto extra después del JSON (bug real, 23/jul:
+ *  "Unexpected non-whitespace character after JSON" ×2 → estado perdido). */
+function extractFirstJsonObject(str) {
+    const start = str.indexOf('{');
+    if (start === -1) return null;
+    let depth = 0, inString = false, escaped = false;
+    for (let i = start; i < str.length; i++) {
+        const c = str[i];
+        if (inString) {
+            if (escaped) escaped = false;
+            else if (c === '\\') escaped = true;
+            else if (c === '"') inString = false;
+        } else {
+            if (c === '"') inString = true;
+            else if (c === '{') depth++;
+            else if (c === '}') {
+                depth--;
+                if (depth === 0) return str.slice(start, i + 1);
+            }
+        }
+    }
+    return null; // JSON incompleto (p.ej. respuesta truncada)
+}
+
 /** Parsea el BRIEF_STATE de la respuesta completa y lo vuelca a briefData.
  *  Valores no vacíos del estado SOBREESCRIBEN lo local (el modelo tiene el
  *  contexto completo; lo local puede estar contaminado por el sistema viejo
@@ -558,10 +589,10 @@ function applyBriefState(fullText) {
     const idx = fullText.indexOf(BRIEF_STATE_MARKER);
     if (idx === -1) return false;
     const jsonPart = fullText.slice(idx + BRIEF_STATE_MARKER.length).trim();
-    const match = jsonPart.match(/\{[\s\S]*\}/);
-    if (!match) return false;
+    const jsonStr = extractFirstJsonObject(jsonPart);
+    if (!jsonStr) return false;
     try {
-        const state = JSON.parse(match[0]);
+        const state = JSON.parse(jsonStr);
         let applied = 0;
         for (const [key, value] of Object.entries(state)) {
             if (!(key in briefData)) continue;          // solo claves conocidas
@@ -1043,11 +1074,78 @@ function createLoadingDots() {
 // clara de la plantilla ("PROJECT NAME"), y (2) cualquier campo capturado
 // sin encontrar su etiqueta de cierre se descarta en vez de quedarse con
 // basura.
+/**
+ * Parser del formato de brief que MELISA misma genera (secciones 0-13).
+ * Caso de uso real (23/jul, sesión Dove): el usuario descarga el PDF de
+ * MELISA con el brief a medias y lo vuelve a subir para continuar. Sin este
+ * parser, campos que YA estaban en el documento (audiencia, insight, etc.)
+ * se perdían y MELISA los volvía a preguntar.
+ * Valores "Por definir"/"TBD" se saltan — son huecos, no datos.
+ */
+function extractFromMelisaDoc(text) {
+    if (!/INFORMACI[ÓO]N GENERAL DEL PROYECTO/i.test(text)) return {};
+
+    const isPlaceholder = (v) => /^(por definir|tbd|pendiente|n\/a|—|-)[.\s]*$/i.test(v.trim());
+    const clean = (v) => v
+        .replace(/MELISA\s*—\s*Documento Estratégico de Campaña/gi, '')
+        .replace(/Página \d+/gi, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+    const between = (startRe, endRe) => {
+        const m = startRe.exec(text);
+        if (!m) return '';
+        const rest = text.slice(m.index + m[0].length);
+        const e = endRe ? endRe.exec(rest) : null;
+        return clean(e ? rest.slice(0, e.index) : rest);
+    };
+
+    const MAP = [
+        ['campaignName',         /Nombre del proyecto \/ campaña:\s*/i, /Marca:/i],
+        ['brand',                /Marca:\s*/i, /Tipo de campaña:/i],
+        ['campaignType',         /Tipo de campaña:\s*/i, /Project Lead MELI:/i],
+        ['projectLeadMeli',      /Project Lead MELI:\s*/i, /Project Lead Marca:/i],
+        ['projectLeadBrand',     /Project Lead Marca:\s*/i, /Mercado\(s\):/i],
+        ['markets',              /Mercado\(s\):\s*/i, /Brief realizado por:/i],
+        ['businessContext',      /1\.\s*EL RETO\s*/i, /Brief en un Tweet:/i],
+        ['challengeTweet',       /Brief en un Tweet:\s*/i, /2\.\s*M[ÉE]TRICAS/i],
+        ['kpis',                 /2\.\s*M[ÉE]TRICAS CLAVE DE [ÉE]XITO \(KPIs\)\s*/i, /Foco:/i],
+        ['objectiveFocus',       /Foco:\s*/i, /Objetivo principal:/i],
+        ['objectiveMain',        /Objetivo principal:\s*/i, /3\.\s*PRODUCTO/i],
+        ['heroProducts',         /3\.\s*PRODUCTO\(S\) HERO\s*/i, /4\.\s*AUDIENCIA/i],
+        ['targetAudience',       /4\.\s*AUDIENCIA Y FUNDAMENTOS ESTRAT[ÉE]GICOS\s*/i, /5\.\s*KEY CONSUMER/i],
+        ['consumerInsight',      /5\.\s*KEY CONSUMER INSIGHT\s*/i, /6\.\s*COMPETENCIA/i],
+        ['competition',          /Competencia:\s*/i, /Diferenciador:/i],
+        ['differentiator',       /Diferenciador:\s*/i, /7\.\s*ESTRATEGIA/i],
+        ['creativeConceptStatus',/Concepto:\s*/i, /Tagline:/i],
+        ['tagline',              /Tagline:\s*/i, /Key Message:/i],
+        ['keyMessage',           /Key Message:\s*/i, /Territorio emocional:/i],
+        ['emotionalTerritory',   /Territorio emocional:\s*/i, /Campañas previas:/i],
+        ['previousCampaigns',    /Campañas previas:\s*/i, /8\.\s*USO DE INTELIGENCIA/i],
+        ['aiUsage',              /8\.\s*USO DE INTELIGENCIA ARTIFICIAL\s*/i, /9\.\s*RECURSOS/i],
+        ['referenceFiles',       /Archivos:\s*/i, /Do'?s y Don'?ts:/i],
+        ['dosAndDonts',          /Do'?s y Don'?ts:\s*/i, /10\.\s*ARQUITECTURA/i],
+        ['promotionalMechanics', /10\.\s*ARQUITECTURA DE CAMPAÑA[\s\S]{0,10}?MEC[ÁA]NICA PROMOCIONAL\s*/i, /11\.\s*ECOSISTEMA/i],
+        ['brandInvestmentUSD',   /Monto de Inversi[óo]n de Marca \(USD\):\s*/i, /Formatos Core:/i],
+        ['coreFormats',          /Formatos Core:\s*/i, /Amplificaci[óo]n:/i],
+        ['amplification',        /Amplificaci[óo]n:\s*/i, /Influencer Marketing \/ Branded Content:/i],
+        ['brandedContent',       /Influencer Marketing \/ Branded Content:\s*/i, /12\.\s*TIMELINE/i],
+        ['timeline',             /12\.\s*TIMELINE\s*/i, /13\.\s*APPENDIX/i],
+        ['additionalData',       /13\.\s*APPENDIX\s*/i, null],
+    ];
+
+    const found = {};
+    for (const [field, startRe, endRe] of MAP) {
+        const value = between(startRe, endRe);
+        if (value && !isPlaceholder(value) && value.length <= 2000) {
+            found[field] = value;
+        }
+    }
+    return found;
+}
+
 function extractStructuredFieldsFromDoc(text) {
-    // Firma de la plantilla de TRÓPICA/Mercado Ads. Si no aparece, este no es
-    // ese documento — no arriesgamos falsos positivos con regexes genéricos
-    // como \bBRAND\b sobre un texto cualquiera.
-    if (!/PROJECT NAME/i.test(text)) return {};
+    // Formato 2: brief generado por la propia MELISA (re-subido para iterar)
+    if (!/PROJECT NAME/i.test(text)) return extractFromMelisaDoc(text);
 
     const MAX_FIELD_LEN = 150; // un nombre de proyecto/marca/persona nunca es tan largo
 
