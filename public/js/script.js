@@ -901,43 +901,62 @@ function createLoadingDots() {
 // Pendiente a futuro (más robusto): que MELISA misma devuelva un bloque de
 // datos estructurados en cada respuesta, para no depender de ningún formato
 // de documento ni de la detección de pasos por palabra clave.
+//
+// BUG REAL encontrado (log del 23/jul, segundo documento subido en la misma
+// sesión — "Estrategia Creativa NYX Latinoamérica.pdf", una hoja de ruta en
+// prosa, NO la plantilla de brief): el regex de BRAND sin un cierre confiable
+// podía matchear la palabra "brand" mencionada de pasada en CUALQUIER texto
+// de marketing y, al no encontrar "PROJECT LEAD @ MELI" después, se quedaba
+// capturando el resto del documento entero como "valor". Dos salvaguardas
+// nuevas: (1) no intentamos extraer NADA si el documento no tiene la firma
+// clara de la plantilla ("PROJECT NAME"), y (2) cualquier campo capturado
+// sin encontrar su etiqueta de cierre se descarta en vez de quedarse con
+// basura.
 function extractStructuredFieldsFromDoc(text) {
-    /** Devuelve el texto entre el final de `afterLabel` y el inicio de `beforeLabel`. */
-    const grab = (afterLabel, beforeLabel) => {
+    // Firma de la plantilla de TRÓPICA/Mercado Ads. Si no aparece, este no es
+    // ese documento — no arriesgamos falsos positivos con regexes genéricos
+    // como \bBRAND\b sobre un texto cualquiera.
+    if (!/PROJECT NAME/i.test(text)) return {};
+
+    const MAX_FIELD_LEN = 150; // un nombre de proyecto/marca/persona nunca es tan largo
+
+    /** Captura el texto entre `afterLabel` y `beforeLabel`. Si no encuentra el
+     *  cierre, o el resultado es sospechosamente largo, descarta el match. */
+    const grabBounded = (afterLabel, beforeLabel) => {
         const afterMatch = afterLabel.exec(text);
         if (!afterMatch) return '';
-        const start = afterMatch.index + afterMatch[0].length;
-        let end = text.length;
-        if (beforeLabel) {
-            const rest = text.slice(start);
-            const beforeMatch = beforeLabel.exec(rest);
-            if (beforeMatch) end = start + beforeMatch.index;
-        }
-        return text.slice(start, end).replace(/\s{2,}/g, ' ').trim();
+        const rest = text.slice(afterMatch.index + afterMatch[0].length);
+        const beforeMatch = beforeLabel.exec(rest);
+        if (!beforeMatch) return ''; // sin cierre confiable → no confiamos en el resto del documento
+        const value = rest.slice(0, beforeMatch.index).replace(/\s{2,}/g, ' ').trim();
+        return value.length <= MAX_FIELD_LEN ? value : '';
+    };
+
+    /** Para campos sin una etiqueta de cierre conocida (nombres de persona):
+     *  nos quedamos solo con las primeras `maxWords` palabras. */
+    const grabWords = (afterLabel, maxWords) => {
+        const afterMatch = afterLabel.exec(text);
+        if (!afterMatch) return '';
+        const rest = text.slice(afterMatch.index + afterMatch[0].length).trim();
+        return rest.split(/\s+/).slice(0, maxWords).join(' ').trim();
     };
 
     const found = {};
 
-    const projectName = grab(/PROJECT NAME\s+/i, /\bBRAND\s+/i);
+    const projectName = grabBounded(/PROJECT NAME\s+/i, /\bBRAND\s+/i);
     if (projectName) found.campaignName = projectName;
 
-    const brand = grab(/\bBRAND\s+/i, /PROJECT LEAD\s*@\s*MELI/i);
+    const brand = grabBounded(/\bBRAND\s+/i, /PROJECT LEAD\s*@\s*MELI/i);
     if (brand) found.brand = brand;
 
-    const leadMeli = grab(/PROJECT LEAD\s*@\s*MELI\s+/i, /PROJECT LEAD\s*@\s*BRAND/i);
+    const leadMeli = grabBounded(/PROJECT LEAD\s*@\s*MELI\s+/i, /PROJECT LEAD\s*@\s*BRAND/i);
     if (leadMeli) found.projectLeadMeli = leadMeli;
 
-    // "PROJECT LEAD @ BRAND" no tiene una tercera etiqueta conocida que marque
-    // dónde termina (el extractor de PDF junta todo con espacios, sin saltos
-    // de línea reales dentro de una página). Como es un nombre de persona,
-    // nos quedamos solo con las primeras 2 palabras después de la etiqueta
-    // (probado contra el brief real de NYX: da "LUISA ARANA" exacto). Nombres
-    // con más de 2 palabras (doble apellido, por ejemplo) van a salir cortados
-    // — mejor eso que arrastrar el título de la siguiente sección.
-    const leadBrandRaw = grab(/PROJECT LEAD\s*@\s*BRAND\s+/i, null);
-    if (leadBrandRaw) {
-        found.projectLeadBrand = leadBrandRaw.split(/\s+/).slice(0, 2).join(' ').trim();
-    }
+    // Probado contra el brief real de NYX: da "LUISA ARANA" exacto. Nombres
+    // con más de 2 palabras (doble apellido, por ejemplo) salen cortados —
+    // mejor eso que arrastrar el título de la siguiente sección del doc.
+    const leadBrand = grabWords(/PROJECT LEAD\s*@\s*BRAND\s+/i, 2);
+    if (leadBrand) found.projectLeadBrand = leadBrand;
 
     return found;
 }
@@ -990,6 +1009,13 @@ async function handleFileUpload(input) {
 
             statusDiv.innerHTML = `✅ Documento <b>"${safeName}"</b> analizado. MELISA le está sacando el jugo... ${createLoadingDots()}`;
             await enviarDocTexto(extractedText, safeName);
+
+            // BUG REAL reportado: esta burbuja de "sacando el jugo..." con los
+            // puntitos animados se quedaba ahí para siempre — enviarDocTexto()
+            // ya generó la respuesta real de MELISA en su propia burbuja más
+            // abajo, pero nada limpiaba esta. Visualmente parecía que se había
+            // quedado colgado, aunque el flujo seguía funcionando bien.
+            statusRow.remove();
         }
     } catch (e) {
         statusDiv.style.color = "#fb7185";
