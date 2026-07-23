@@ -46,9 +46,16 @@ export default async function handler(req) {
     }
 
     try {
-        // ── C-2 · Payload size limit (50 KB) ─────────────────────────
+        // ── C-2 · Payload size limit (250 KB) ────────────────────────
+        // Antes 50 KB — quedó chico y causó 413 a media conversación real
+        // (23/jul): el system prompt creció (BRIEF_STATE + reglas), cada
+        // mensaje del historial arrastra su línea de estado, y un documento
+        // adjunto (~15 KB) se reenvía en cada turno dentro de la ventana de
+        // 20 mensajes. 250 KB da margen holgado y sigue siendo un tope
+        // razonable contra abuso.
+        const MAX_PAYLOAD = 250_000;
         const contentLength = parseInt(req.headers.get('content-length') || '0', 10);
-        if (contentLength > 50_000) {
+        if (contentLength > MAX_PAYLOAD) {
             return new Response(JSON.stringify({ error: 'Payload too large' }), {
                 status: 413,
                 headers: { ...SEC_HEADERS, 'Content-Type': 'application/json' },
@@ -58,7 +65,7 @@ export default async function handler(req) {
         const body = await req.json();
 
         // Double-check after parsing (in case Content-Length was missing)
-        if (JSON.stringify(body).length > 50_000) {
+        if (JSON.stringify(body).length > MAX_PAYLOAD) {
             return new Response(JSON.stringify({ error: 'Payload too large' }), {
                 status: 413,
                 headers: { ...SEC_HEADERS, 'Content-Type': 'application/json' },

@@ -1478,6 +1478,10 @@ async function llamarAPI(originalText, _retry = true) {
         let errorTexto = String(e);
         if (e && e.message) errorTexto = e.message;
         botDiv.innerText = "⚠️ Hubo un error de conexión. Por favor intenta de nuevo.";
+        // Guarda el borrador también en el camino de error — el mensaje del
+        // usuario ya está en conversationHistory y no debe perderse si
+        // recarga la página después del fallo.
+        saveDraft();
         logClientEvent('api_chat_failed', errorTexto, {
             lastAskedStep,
             campaignName: briefData.campaignName,
@@ -1967,7 +1971,12 @@ async function descargarBrief() {
 
         // Save locally — nombre descriptivo con marca, campaña y fecha
         doc.save(briefFileName());
-        clearDraft(); // el usuario ya tiene su PDF — ya no hace falta el borrador
+        // Solo limpiamos el borrador si el brief está COMPLETO. El botón de
+        // generar está disponible a media conversación, y borrar el respaldo
+        // en una descarga intermedia hizo perder una conversación real
+        // (23/jul): descarga parcial → clearDraft → error de red → recarga
+        // → nada que restaurar.
+        if (isBriefDataComplete()) clearDraft();
 
         // Send backup copy by email
         try {
@@ -2005,7 +2014,7 @@ async function descargarBrief() {
         }
 
         if (simpleGenerated) {
-            clearDraft(); // el usuario igual se llevó un PDF (versión simple)
+            if (isBriefDataComplete()) clearDraft(); // solo si el brief quedó completo
             try {
                 await sendBriefByEmail(null);
             } catch (mailErr2) {
