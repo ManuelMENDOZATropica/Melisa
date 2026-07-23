@@ -519,7 +519,19 @@ function storeBriefAnswer(text) {
     } else {
         const field = STEP_TO_FIELD[lastAskedStep];
         if (field && text && !text.startsWith('[DOCUMENTO ADJUNTO:')) {
-            briefData[field] = text.trim();
+            // BUG REAL (causa probable de "todo salió Por definir"): si
+            // detectStepInText() no reconoce la pregunta que acaba de hacer
+            // MELISA (porque la frase no calzó con STEP_KEYWORDS), lastAskedStep
+            // se queda congelado en el valor anterior. La siguiente respuesta
+            // del usuario entonces se guardaba con `=` y BORRABA la respuesta
+            // anterior que sí se había capturado bien — sin dejar rastro.
+            // Ahora, si el campo ya tenía un valor distinto, lo conservamos y
+            // agregamos la respuesta nueva en vez de pisarlo.
+            const existing = briefData[field] && briefData[field].trim();
+            const incoming = text.trim();
+            briefData[field] = (existing && existing !== incoming)
+                ? `${existing}\n${incoming}`
+                : incoming;
         }
     }
     if (userEmail) briefData.userEmail = userEmail; // sync with MeLi detection
@@ -1103,7 +1115,7 @@ async function llamarAPI(originalText, _retry = true) {
                 const detectedStep = detectStepInText(botFullText);
         if (detectedStep > 0) {
             lastAskedStep = detectedStep;
-            
+
             // Inyectar Tooltip de ejemplo si existe para este paso
             if (STEP_EXAMPLES[detectedStep]) {
                 const tooltipHtml = ` <i class="tooltip-icon" data-tooltip="Ejemplo ficticio:\n${STEP_EXAMPLES[detectedStep]}">i</i>`;
@@ -1113,6 +1125,16 @@ async function llamarAPI(originalText, _retry = true) {
                     botDiv.innerHTML += tooltipHtml;
                 }
             }
+        } else {
+            // MELISA hizo una pregunta cuya frase no calzó con ningún patrón de
+            // STEP_KEYWORDS — lastAskedStep se queda como estaba. Antes esto
+            // causaba pérdida silenciosa de datos (ver storeBriefAnswer); ahora
+            // ya no se pierde, pero igual queremos saber qué tan seguido pasa
+            // para poder ampliar STEP_KEYWORDS con las frases que se escapan.
+            logClientEvent('step_detection_failed', botFullText.substring(0, 300), {
+                lastAskedStep,
+                campaignName: briefData.campaignName,
+            });
         }
 
         // Update the progress bar after every bot response
